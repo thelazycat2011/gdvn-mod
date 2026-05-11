@@ -2,6 +2,7 @@
 #include <Geode/utils/web.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp> // DO NOT REMOVE
 #include "../common.hpp"
+#include "../services/AuthService.hpp"
 
 using namespace geode::prelude;
 
@@ -60,6 +61,117 @@ public:
 	}
 };
 
+std::string getListLabel(matjson::Value const& list) {
+	if (list["isOfficial"].isBool() && list["isOfficial"].asBool().unwrap()) {
+		if (list["slug"].isString()) {
+			std::string slug = list["slug"].asString().unwrap();
+
+			if (slug == "dl") return "DL";
+			if (slug == "pl") return "PL";
+			if (slug == "cl") return "CL";
+			if (slug == "fl") return "FL";
+		}
+	}
+
+	if (list["title"].isString()) {
+		return list["title"].asString().unwrap();
+	}
+
+	return "List";
+}
+
+std::string formatNumber(matjson::Value const& value) {
+	if (!value.isNumber()) {
+		return "";
+	}
+
+	double number = value.asDouble().unwrap();
+	int integer = static_cast<int>(number);
+
+	if (number == static_cast<double>(integer)) {
+		return std::to_string(integer);
+	}
+
+	std::string formatted = fmt::format("{:.1f}", number);
+
+	while (formatted.size() > 1 && formatted.ends_with('0')) {
+		formatted.pop_back();
+	}
+
+	if (formatted.ends_with('.')) {
+		formatted.pop_back();
+	}
+
+	return formatted;
+}
+
+std::string getListValue(matjson::Value const& list) {
+	auto item = list["item"];
+
+	if (!item.isObject()) {
+		return "";
+	}
+
+	bool topMode = false;
+
+	if (list["topEnabled"].isBool()) {
+		topMode = list["topEnabled"].asBool().unwrap();
+	}
+	else if (list["mode"].isString()) {
+		topMode = list["mode"].asString().unwrap() == "top";
+	}
+
+	std::vector<std::string> values;
+
+	if (topMode && item["position"].isNumber()) {
+		values.push_back("#" + formatNumber(item["position"]));
+	}
+
+	if (item["rating"].isNumber()) {
+		values.push_back(formatNumber(item["rating"]) + "pt");
+	}
+
+	if (!topMode && values.empty() && item["position"].isNumber()) {
+		values.push_back("#" + formatNumber(item["position"]));
+	}
+
+	std::string text;
+
+	for (auto& value : values) {
+		if (!text.empty()) {
+			text += " / ";
+		}
+
+		text += value;
+	}
+
+	return text;
+}
+
+std::vector<std::string> getListInfoLabels(matjson::Value const& json) {
+	std::vector<std::string> labels;
+
+	if (!json.isArray()) {
+		return labels;
+	}
+
+	for (auto const& list : json.asArray().unwrap()) {
+		if (!list.isObject()) {
+			continue;
+		}
+
+		std::string value = getListValue(list);
+
+		if (value.empty()) {
+			continue;
+		}
+
+		labels.push_back(getListLabel(list) + ": " + value);
+	}
+
+	return labels;
+}
+
 class $modify(LevelInfoLayer) {
 	struct Fields {
 		async::TaskHolder<web::WebResponse> m_holder;
@@ -79,7 +191,12 @@ class $modify(LevelInfoLayer) {
 		    this->addChild(loadingLabel);
 
 		    web::WebRequest req = web::WebRequest();
-		    m_fields->m_holder.spawn(req.get(API_URL + "/levels/" + std::to_string(id)), [this, level, loadingLabel, id](web::WebResponse res) mutable {
+
+		    if (AuthService::isLoggedIn()) {
+			    req.header("Authorization", "Bearer " + AuthService::getToken());
+		    }
+
+		    m_fields->m_holder.spawn(req.get(API_URL + "/lists/levels/" + std::to_string(id) + "/starred"), [this, level, loadingLabel, id](web::WebResponse res) mutable {
 			    try {
                     if (loadingLabel) {
                         loadingLabel->removeFromParent();
@@ -91,55 +208,7 @@ class $modify(LevelInfoLayer) {
 				    }
 
 				    auto resJson = res.json().unwrap();
-                    bool gameLevelIsPlatformer = level && level->isPlatformer();
-			        bool isPlatformer = gameLevelIsPlatformer, isChallenge = false;
-
-			        if (!gameLevelIsPlatformer && resJson["isPlatformer"].isBool()) {
-                        isPlatformer = resJson["isPlatformer"].asBool().unwrap();
-                    }
-
-			        if (resJson["isChallenge"].isBool()) {
-                        isChallenge = resJson["isChallenge"].asBool().unwrap();
-                    }
-
-			        std::string list;
-
-			        if (!isPlatformer && !isChallenge) {
-                        list = "DL: ";
-                    }
-                    else if (isPlatformer) {
-                        list = "PL: ";
-                    }
-                    else if (isChallenge) {
-                        list = "CL: ";
-                    }
-
-			        std::vector<std::string> labels;
-
-			        if (resJson["rating"].isNumber()) {
-				        std::string dl = list + std::to_string(resJson["rating"].asInt().unwrap());
-
-                        if (!isChallenge) {
-                            if (isPlatformer && resJson["plTop"].isNumber()) {
-                                dl += " (#" + std::to_string(resJson["plTop"].asInt().unwrap()) + ")";
-                            }
-                            else if (resJson["dlTop"].isNumber()) {
-                                dl += " (#" + std::to_string(resJson["dlTop"].asInt().unwrap()) + ")";
-                            }
-                        }
-
-                        labels.push_back(dl);
-                    }
-
-			        if (resJson["flPt"].isNumber()) {
-					    std::string fl = "FL: " + std::to_string(resJson["flPt"].asInt().unwrap());
-
-                        if (resJson["flTop"].isNumber()) {
-                            fl += " (#" + std::to_string(resJson["flTop"].asInt().unwrap()) + ")";
-                        }
-
-                        labels.push_back(fl);
-                    }
+			        std::vector<std::string> labels = getListInfoLabels(resJson);
 
 			        if (!labels.empty()) {
 					    auto btn = ButtonCreator().create(labels, level, this);
