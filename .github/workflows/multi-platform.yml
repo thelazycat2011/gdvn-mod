@@ -54,6 +54,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve mod version
+        id: mod
+        shell: bash
+        run: |
+          version="$(jq -r '.version' mod.json)"
+
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "Cannot resolve mod version from mod.json" >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch version branch
+        shell: bash
+        run: |
+          git fetch origin "${{ steps.mod.outputs.version }}:${{ steps.mod.outputs.version }}"
 
       - uses: geode-sdk/build-geode-mod/combine@main
         id: build
@@ -92,40 +113,36 @@ jobs:
           path: ${{ steps.asset.outputs.path }}
 
       - name: Resolve release notes from PR commits
-        if: github.event_name == 'push' && github.ref == 'refs/heads/version'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: notes
         uses: actions/github-script@v7
+        env:
+          VERSION_BRANCH: ${{ steps.mod.outputs.version }}
+          RELEASE_TAG: ${{ steps.mod.outputs.tag }}
         with:
           script: |
             const { owner, repo } = context.repo;
 
+            const versionBranch = process.env.VERSION_BRANCH;
+            const releaseTag = process.env.RELEASE_TAG;
+
             const allowedTypes = new Map([
               ['feat', 'Features'],
-              ['fix', 'Fixes'],
             ]);
 
-            const pushedCommits = context.payload.commits ?? [];
-            const prNumbers = new Set();
+            const commits = await github.paginate(
+              github.rest.repos.compareCommitsWithBasehead,
+              {
+                owner,
+                repo,
+                basehead: `${versionBranch}...main`,
+                per_page: 100,
+              },
+              response => response.data.commits,
+            );
 
-            for (const pushedCommit of pushedCommits) {
-              const prs = await github.paginate(
-                github.rest.repos.listPullRequestsAssociatedWithCommit,
-                {
-                  owner,
-                  repo,
-                  commit_sha: pushedCommit.id,
-                },
-              );
-
-              for (const pr of prs) {
-                if (pr.merged_at && pr.base.ref === 'version') {
-                  prNumbers.add(pr.number);
-                }
-              }
-            }
-
-            if (prNumbers.size === 0) {
-              core.warning('No merged PR found for pushed commits; skipping release note generation.');
+            if (commits.length === 0) {
+              core.warning(`No commits found between ${versionBranch} and main.`);
               core.setOutput('notes', '');
               core.setOutput('title', '');
               core.setOutput('tag', '');
@@ -134,35 +151,23 @@ jobs:
 
             const groups = new Map();
 
-            for (const prNumber of prNumbers) {
-              const commits = await github.paginate(
-                github.rest.pulls.listCommits,
-                {
-                  owner,
-                  repo,
-                  pull_number: prNumber,
-                  per_page: 100,
-                },
+            for (const commit of commits) {
+              const firstLine = (commit.commit.message || '').split('\n')[0].trim();
+
+              const match = firstLine.match(
+                /^(?<type>[a-z]+)(?:\([^)]+\))?(?<breaking>!)?:\s+(?<subject>.+)$/i
               );
 
-              for (const commit of commits) {
-                const firstLine = (commit.commit.message || '').split('\n')[0].trim();
+              if (!match?.groups) continue;
 
-                const match = firstLine.match(
-                  /^(?<type>[a-z]+)(?:\([^)]+\))?(?<breaking>!)?:\s+(?<subject>.+)$/i
-                );
+              const type = match.groups.type.toLowerCase();
+              const subject = match.groups.subject.trim();
 
-                if (!match?.groups) continue;
+              if (!allowedTypes.has(type)) continue;
 
-                const type = match.groups.type.toLowerCase();
-                const subject = match.groups.subject.trim();
-
-                if (!allowedTypes.has(type)) continue;
-
-                const section = allowedTypes.get(type);
-                if (!groups.has(section)) groups.set(section, []);
-                groups.get(section).push(`- ${subject}`);
-              }
+              const section = allowedTypes.get(type);
+              if (!groups.has(section)) groups.set(section, []);
+              groups.get(section).push(`- ${subject}`);
             }
 
             const notes = [...groups.entries()]
@@ -170,21 +175,19 @@ jobs:
               .join('\n\n');
 
             if (!notes) {
-              core.warning('No releasable commit messages found in merged PRs; skipping release creation.');
+              core.warning('No feat commits found; skipping release creation.');
               core.setOutput('notes', '');
               core.setOutput('title', '');
               core.setOutput('tag', '');
               return;
             }
 
-            const releaseVersion = github.ref_name;
-
-            core.setOutput('title', releaseVersion);
-            core.setOutput('tag', releaseVersion);
+            core.setOutput('title', releaseTag);
+            core.setOutput('tag', releaseTag);
             core.setOutput('notes', notes);
 
       - name: Create GitHub release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/version' && steps.notes.outputs.tag != ''
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.notes.outputs.tag != ''
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
