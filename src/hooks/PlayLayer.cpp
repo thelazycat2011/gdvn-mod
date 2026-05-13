@@ -6,12 +6,14 @@
 #include "../services/EventSubmitter.hpp"
 #include "../services/RaidSubmitter.hpp"
 #include "../services/PvpSubmitter.hpp"
+#include "../services/CheatGuard.hpp"
 
 using namespace geode::prelude;
 
 class $modify(DTPlayLayer, PlayLayer) {
 	struct Fields {
 		bool hasRespawned = false;
+		bool isCheatedRun = false;
 		AttemptCounter attemptCounter;
 		DeathCounter deathCounter;
 		EventSubmitter *eventSubmitter;
@@ -31,8 +33,17 @@ class $modify(DTPlayLayer, PlayLayer) {
 		m_fields->eventSubmitter = new EventSubmitter(id);
 		m_fields->raidSubmitter = new RaidSubmitter(id);
 		m_fields->pvpSubmitter = new PvpSubmitter(id);
+		m_fields->isCheatedRun = CheatGuard::isGameplayCheated();
 
 		return true;
+	}
+
+	void postUpdate(float dt) {
+		PlayLayer::postUpdate(dt);
+
+		if (!m_fields->isCheatedRun && !m_level->isPlatformer() && !m_isPracticeMode && CheatGuard::isGameplayCheated()) {
+			m_fields->isCheatedRun = true;
+		}
 	}
 
 	void destroyPlayer(PlayerObject * player, GameObject * p1) {
@@ -42,9 +53,15 @@ class $modify(DTPlayLayer, PlayLayer) {
 			return;
 		}
 
-		m_fields->attemptCounter.add();
-
 		if (!m_level->isPlatformer() && !m_isPracticeMode) {
+			bool isCheated = m_fields->isCheatedRun || CheatGuard::isGameplayCheated();
+			log::info("Run ended on level {} at {}%: {}", m_level->m_levelID.value(), this->getCurrentPercentInt(), isCheated ? "cheated" : "not cheated");
+
+			if (isCheated) {
+				return;
+			}
+
+			m_fields->attemptCounter.add();
 			m_fields->deathCounter.add(this->getCurrentPercentInt());
 			m_fields->eventSubmitter->record(this->getCurrentPercent());
 			m_fields->raidSubmitter->record(this->getCurrentPercent());
@@ -56,6 +73,13 @@ class $modify(DTPlayLayer, PlayLayer) {
 		PlayLayer::levelComplete();
 
 		if (!m_isPracticeMode) {
+			bool isCheated = m_fields->isCheatedRun || CheatGuard::isGameplayCheated();
+			log::info("Run completed on level {}: {}", m_level->m_levelID.value(), isCheated ? "cheated" : "not cheated");
+
+			if (isCheated) {
+				return;
+			}
+
 			m_fields->eventSubmitter->record(100);
 			m_fields->raidSubmitter->record(100);
 			m_fields->pvpSubmitter->record(100);
@@ -67,13 +91,18 @@ class $modify(DTPlayLayer, PlayLayer) {
 		PlayLayer::resetLevel();
 
 		m_fields->hasRespawned = true;
+		m_fields->isCheatedRun = CheatGuard::isGameplayCheated();
 	}
 
 	void onQuit() {
 		PlayLayer::onQuit();
 
-		m_fields->attemptCounter.submit();
-		m_fields->deathCounter.submit();
+		if (m_fields->isCheatedRun || CheatGuard::isGameplayCheated()) {
+			log::info("Skipping gameplay API submissions because the run is cheated");
+		} else {
+			m_fields->attemptCounter.submit();
+			m_fields->deathCounter.submit();
+		}
 
 		delete m_fields->eventSubmitter;
 		delete m_fields->raidSubmitter;
