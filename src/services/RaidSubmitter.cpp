@@ -3,7 +3,6 @@
 #include <Geode/utils/web.hpp>
 
 #include "AuthService.hpp"
-#include "CheatGuard.hpp"
 #include "../common.hpp"
 
 async::TaskHolder<web::WebResponse> RaidSubmitter::m_get_holder, RaidSubmitter::m_put_holder;
@@ -28,10 +27,6 @@ RaidSubmitter::RaidSubmitter(int levelID): levelID(levelID) {
 
 void RaidSubmitter::submit() {
 	if (!inEvent.load()) {
-		return;
-	}
-
-	if (!CheatGuard::canSubmitGameplayApi()) {
 		return;
 	}
 

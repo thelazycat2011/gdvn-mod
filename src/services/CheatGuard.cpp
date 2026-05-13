@@ -4,7 +4,7 @@
 #include <Geode/Geode.hpp>
 #include <legowiifun.cheat_api/include/cheatAPI.hpp>
 
-bool CheatGuard::canSubmitGameplayApi() {
+bool CheatGuard::isGameplayCheated() {
 	static constexpr std::array rulesetsToCheck = {
 		ROBTOP,
 		DEMONLIST,
@@ -16,10 +16,9 @@ bool CheatGuard::canSubmitGameplayApi() {
 
 	for (auto ruleset : rulesetsToCheck) {
 		if (cheatAPI::isCheating(ruleset)) {
-			geode::log::debug("Skipping gameplay API submission because Cheat API reports active cheat");
-			return false;
+			return true;
 		}
 	}
 
-	return true;
+	return false;
 }

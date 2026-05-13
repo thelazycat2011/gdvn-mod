@@ -2,5 +2,5 @@
 
 class CheatGuard {
 public:
-	static bool canSubmitGameplayApi();
+	static bool isGameplayCheated();
 };
