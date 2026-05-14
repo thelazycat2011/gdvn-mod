@@ -13,12 +13,20 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(GDVN VERSION 1.0.0)
 
+if (APPLE)
+    enable_language(OBJCXX)
+endif()
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-	src/*.cpp src/*.hpp src/*.h
+	src/*.cpp src/*.hpp src/*.h src/*.mm
 )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES}
         src/services/CheatGuard.cpp)
+
+if (APPLE)
+    set_source_files_properties(src/services/PvpRealtimeSocket.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Release>:BUILD_RELEASE>
