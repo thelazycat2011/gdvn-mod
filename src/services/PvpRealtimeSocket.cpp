@@ -1,189 +1,182 @@
 #include "PvpRealtimeSocket.hpp"
 
-#ifdef __ANDROID__
-
 #include <Geode/Geode.hpp>
+#include <ixwebsocket/IXNetSystem.h>
+#include <ixwebsocket/IXSocketTLSOptions.h>
+#include <ixwebsocket/IXWebSocket.h>
+#include <ixwebsocket/IXWebSocketMessage.h>
+#include <ixwebsocket/IXWebSocketMessageType.h>
+
+#include <atomic>
+#include <mutex>
 
 using namespace geode::prelude;
 
-struct libwebsocket;
-struct libwebsocket_context;
-struct libwebsocket_protocols;
-
-#ifndef __CC_WEBSOCKET_H__
-namespace cocos2d::extension {
-class WsThreadHelper;
-class WsMessage;
-
-class WebSocket {
-public:
-	WebSocket();
-	virtual ~WebSocket();
-
-	struct Data {
-		Data() : bytes(nullptr), len(0), isBinary(false) {}
-		char* bytes;
-		int len;
-		bool isBinary;
-	};
-
-	enum ErrorCode {
-		kErrorTimeout = 0,
-		kErrorConnectionFailure,
-		kErrorUnknown
-	};
-
-	class Delegate {
-	public:
-		virtual ~Delegate() {}
-		virtual void onOpen(WebSocket* ws) = 0;
-		virtual void onMessage(WebSocket* ws, Data const& data) = 0;
-		virtual void onClose(WebSocket* ws) = 0;
-		virtual void onError(WebSocket* ws, ErrorCode const& error) = 0;
-	};
-
-	bool init(Delegate const& delegate, gd::string const& url, gd::vector<gd::string> const* protocols = nullptr);
-	void send(gd::string const& message);
-	void send(unsigned char const* binaryMsg, unsigned int len);
-	void close();
-
-	enum State {
-		kStateConnecting = 0,
-		kStateOpen,
-		kStateClosing,
-		kStateClosed
-	};
-
-	State getReadyState();
-
-private:
-	virtual void onSubThreadStarted();
-	virtual int onSubThreadLoop();
-	virtual void onSubThreadEnded();
-	virtual void onUIThreadReceiveMessage(WsMessage* msg);
-
-public:
-	State _readyState;
-	gd::string _host;
-	unsigned int _port;
-	gd::string _path;
-	WsThreadHelper* _wsHelper;
-	libwebsocket* _wsInstance;
-	libwebsocket_context* _wsContext;
-	Delegate* _delegate;
-	int _SSLConnection;
-	libwebsocket_protocols* _wsProtocols;
-};
+namespace {
+void ensureIxNetSystem() {
+	static std::once_flag once;
+	std::call_once(once, [] {
+		ix::initNetSystem();
+	});
 }
+
+ix::SocketTLSOptions tlsOptions() {
+	ix::SocketTLSOptions options;
+
+#ifdef __ANDROID__
+	// IXWebSocket's mbedTLS backend cannot read Android's system certificate store.
+	// HTTPS API calls still use Geode/libcurl verification; this only affects the
+	// Supabase realtime websocket on Android.
+	options.caFile = "NONE";
+#else
+	options.caFile = "SYSTEM";
 #endif
 
-namespace {
-class CocosPvpRealtimeSocket final
-	: public PvpRealtimeSocket,
-	  public cocos2d::extension::WebSocket::Delegate,
-	  public std::enable_shared_from_this<CocosPvpRealtimeSocket> {
-public:
-	explicit CocosPvpRealtimeSocket(PvpRealtimeSocketDelegate* delegate) : m_delegate(delegate) {}
+	return options;
+}
 
-	~CocosPvpRealtimeSocket() override {
+class IxPvpRealtimeSocket final : public PvpRealtimeSocket, public std::enable_shared_from_this<IxPvpRealtimeSocket> {
+public:
+	explicit IxPvpRealtimeSocket(PvpRealtimeSocketDelegate* delegate) : m_delegate(delegate) {}
+
+	~IxPvpRealtimeSocket() override {
 		this->close();
 	}
 
 	bool connect(std::string const& url) override {
-		if (m_socket || m_closed) {
+		if (m_socket || m_closed.load()) {
 			return false;
 		}
 
-		auto socket = std::make_unique<cocos2d::extension::WebSocket>();
-		if (!socket->init(*this, gd::string(url))) {
-			return false;
-		}
+		ensureIxNetSystem();
+
+		auto socket = std::make_unique<ix::WebSocket>();
+		socket->setUrl(url);
+		socket->setTLSOptions(tlsOptions());
+		socket->setHandshakeTimeout(10);
+		socket->disableAutomaticReconnection();
+		socket->disablePerMessageDeflate();
+
+		auto weakSelf = this->weak_from_this();
+		socket->setOnMessageCallback([weakSelf](ix::WebSocketMessagePtr const& msg) {
+			auto self = weakSelf.lock();
+			if (!self || !msg) {
+				return;
+			}
+
+			switch (msg->type) {
+				case ix::WebSocketMessageType::Open:
+					self->handleOpen();
+					break;
+
+				case ix::WebSocketMessageType::Message:
+					if (!msg->binary) {
+						self->handleMessage(msg->str);
+					}
+					break;
+
+				case ix::WebSocketMessageType::Close:
+				case ix::WebSocketMessageType::Error:
+					self->handleClosed();
+					break;
+
+				default:
+					break;
+			}
+		});
 
 		m_socket = std::move(socket);
+		m_socket->start();
 		return true;
 	}
 
 	void send(std::string const& message) override {
-		if (!this->isOpen()) {
+		if (!this->isOpen() || !m_socket) {
 			return;
 		}
 
-		m_socket->send(gd::string(message));
+		m_socket->sendUtf8Text(message);
 	}
 
 	void close() override {
-		if (m_closed) {
+		if (m_closed.exchange(true)) {
 			return;
 		}
 
-		m_closed = true;
-		m_open = false;
-		m_delegate = nullptr;
+		m_open.store(false);
+
+		{
+			std::lock_guard lock(m_delegateMutex);
+			m_delegate = nullptr;
+		}
 
 		if (m_socket) {
-			m_socket->close();
+			m_socket->stop();
 			m_socket.reset();
 		}
 	}
 
 	bool isOpen() const override {
-		return m_socket && m_open && !m_closed && m_socket->getReadyState() == cocos2d::extension::WebSocket::kStateOpen;
-	}
-
-	void onOpen(cocos2d::extension::WebSocket*) override {
-		m_open = true;
-
-		auto weakSelf = this->weak_from_this();
-		Loader::get()->queueInMainThread([weakSelf] {
-			if (auto self = weakSelf.lock(); self && self->m_delegate && !self->m_closed) {
-				self->m_delegate->onRealtimeOpen();
-			}
-		});
-	}
-
-	void onMessage(cocos2d::extension::WebSocket*, cocos2d::extension::WebSocket::Data const& data) override {
-		if (!m_delegate || m_closed || data.isBinary || !data.bytes || data.len <= 0) {
-			return;
-		}
-
-		auto message = std::string(data.bytes, static_cast<size_t>(data.len));
-		auto weakSelf = this->weak_from_this();
-
-		Loader::get()->queueInMainThread([weakSelf, message = std::move(message)] {
-			if (auto self = weakSelf.lock(); self && self->m_delegate && !self->m_closed) {
-				self->m_delegate->onRealtimeMessage(message);
-			}
-		});
-	}
-
-	void onClose(cocos2d::extension::WebSocket*) override {
-		this->finishClosed();
-	}
-
-	void onError(cocos2d::extension::WebSocket*, cocos2d::extension::WebSocket::ErrorCode const&) override {
-		this->finishClosed();
+		return m_socket && m_open.load() && !m_closed.load() && m_socket->getReadyState() == ix::ReadyState::Open;
 	}
 
 private:
 	PvpRealtimeSocketDelegate* m_delegate = nullptr;
-	std::unique_ptr<cocos2d::extension::WebSocket> m_socket;
-	bool m_open = false;
-	bool m_closed = false;
+	std::unique_ptr<ix::WebSocket> m_socket;
+	mutable std::mutex m_delegateMutex;
+	std::atomic_bool m_open = false;
+	std::atomic_bool m_closed = false;
 
-	void finishClosed() {
-		if (m_closed) {
+	void handleOpen() {
+		if (m_closed.load()) {
 			return;
 		}
 
-		m_open = false;
-		m_closed = true;
+		m_open.store(true);
+		auto weakSelf = this->weak_from_this();
+
+		Loader::get()->queueInMainThread([weakSelf] {
+			if (auto self = weakSelf.lock()) {
+				std::lock_guard lock(self->m_delegateMutex);
+				if (self->m_delegate && !self->m_closed.load()) {
+					self->m_delegate->onRealtimeOpen();
+				}
+			}
+		});
+	}
+
+	void handleMessage(std::string const& message) {
+		if (m_closed.load()) {
+			return;
+		}
 
 		auto weakSelf = this->weak_from_this();
+
+		Loader::get()->queueInMainThread([weakSelf, message] {
+			if (auto self = weakSelf.lock()) {
+				std::lock_guard lock(self->m_delegateMutex);
+				if (self->m_delegate && !self->m_closed.load()) {
+					self->m_delegate->onRealtimeMessage(message);
+				}
+			}
+		});
+	}
+
+	void handleClosed() {
+		if (m_closed.exchange(true)) {
+			return;
+		}
+
+		m_open.store(false);
+		auto weakSelf = this->weak_from_this();
+
 		Loader::get()->queueInMainThread([weakSelf] {
-			if (auto self = weakSelf.lock(); self && self->m_delegate) {
-				auto* delegate = self->m_delegate;
-				self->m_delegate = nullptr;
-				delegate->onRealtimeClose();
+			if (auto self = weakSelf.lock()) {
+				std::lock_guard lock(self->m_delegateMutex);
+				if (auto* delegate = self->m_delegate) {
+					self->m_delegate = nullptr;
+					delegate->onRealtimeClose();
+				}
 			}
 		});
 	}
@@ -191,31 +184,5 @@ private:
 }
 
 std::shared_ptr<PvpRealtimeSocket> PvpRealtimeSocket::create(PvpRealtimeSocketDelegate* delegate) {
-	return std::make_shared<CocosPvpRealtimeSocket>(delegate);
+	return std::make_shared<IxPvpRealtimeSocket>(delegate);
 }
-
-#elif !defined(__APPLE__)
-
-namespace {
-class StubPvpRealtimeSocket final : public PvpRealtimeSocket {
-public:
-	explicit StubPvpRealtimeSocket(PvpRealtimeSocketDelegate*) {}
-
-	bool connect(std::string const&) override {
-		return false;
-	}
-
-	void send(std::string const&) override {}
-	void close() override {}
-
-	bool isOpen() const override {
-		return false;
-	}
-};
-}
-
-std::shared_ptr<PvpRealtimeSocket> PvpRealtimeSocket::create(PvpRealtimeSocketDelegate* delegate) {
-	return std::make_shared<StubPvpRealtimeSocket>(delegate);
-}
-
-#endif
