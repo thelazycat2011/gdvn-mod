@@ -4,7 +4,6 @@
 #include "../common.hpp"
 
 #include <algorithm>
-#include <cctype>
 
 using namespace geode::prelude;
 
@@ -434,20 +433,9 @@ void PvpOverlay::updateLabelPosition() {
 		return;
 	}
 
-	auto corner = Mod::get()->getSettingValue<std::string>("pvp-overlay-corner");
-	std::transform(corner.begin(), corner.end(), corner.begin(), [](unsigned char c) {
-		return static_cast<char>(std::tolower(c));
-	});
-
 	auto size = CCDirector::sharedDirector()->getWinSize();
-	bool right = corner == "top-right" || corner == "bottom-right";
-	bool top = corner != "bottom-left" && corner != "bottom-right";
-
-	m_label->setAnchorPoint({ right ? 1.0f : 0.0f, top ? 1.0f : 0.0f });
-	m_label->setPosition({
-		right ? size.width - LABEL_MARGIN : LABEL_MARGIN,
-		top ? size.height - LABEL_MARGIN : LABEL_MARGIN,
-	});
+	m_label->setAnchorPoint({ 0.0f, 1.0f });
+	m_label->setPosition({ LABEL_MARGIN, size.height - LABEL_MARGIN });
 }
 
 void PvpOverlay::setOverlayVisible(bool visible) {
