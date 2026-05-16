@@ -38,7 +38,7 @@ class $modify(DTPlayLayer, PlayLayer) {
 		m_fields->pvpSubmitter = new PvpSubmitter(id);
 		m_fields->isCheatedRun = CheatGuard::isGameplayCheated();
 
-		if (Mod::get()->getSettingValue<bool>("show-pvp-overlay") && AuthService::isLoggedIn() && !m_level->isPlatformer() && !m_isPracticeMode) {
+		if (AuthService::isLoggedIn() && !m_level->isPlatformer() && !m_isPracticeMode) {
 			m_fields->pvpOverlay = new PvpOverlay(this, id);
 		}
 
