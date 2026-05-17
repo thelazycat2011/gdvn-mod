@@ -16,6 +16,8 @@ class $modify(DTPlayLayer, PlayLayer) {
 	struct Fields {
 		bool hasRespawned = false;
 		bool isCheatedRun = false;
+		bool noclipDetected = false;
+		GameObject* disabledCheatObject = nullptr;
 		AttemptCounter attemptCounter;
 		DeathCounter deathCounter;
 		EventSubmitter *eventSubmitter;
@@ -23,6 +25,44 @@ class $modify(DTPlayLayer, PlayLayer) {
 		PvpSubmitter *pvpSubmitter;
 		PvpOverlay *pvpOverlay = nullptr;
 	};
+
+	static void onModify(auto& self) {
+		(void)self.setHookPriorityPre("PlayLayer::destroyPlayer", Priority::First);
+	}
+
+	bool isDamageBypassActive() {
+		return m_isIgnoreDamageEnabled || m_ignoreDamage;
+	}
+
+	bool isRunCheated() {
+		if (!m_fields->isCheatedRun && CheatGuard::isGameplayCheated()) {
+			m_fields->isCheatedRun = true;
+		}
+
+		if (!m_fields->isCheatedRun && isDamageBypassActive()) {
+			log::warn("Damage bypass detected on level {}", m_level->m_levelID.value());
+			m_fields->isCheatedRun = true;
+		}
+
+		return m_fields->isCheatedRun || m_fields->noclipDetected;
+	}
+
+	void checkNoclip(PlayerObject* player, GameObject* hitObject) {
+		if (!m_fields->disabledCheatObject) {
+			m_fields->disabledCheatObject = hitObject;
+		}
+
+		if (
+			!m_fields->noclipDetected &&
+			m_fields->disabledCheatObject != hitObject &&
+			!player->m_isDead &&
+			!m_levelEndAnimationStarted
+		) {
+			log::warn("Noclip detected on level {}", m_level->m_levelID.value());
+			m_fields->noclipDetected = true;
+			m_fields->isCheatedRun = true;
+		}
+	}
 
 	bool init(GJGameLevel * level, bool p1, bool p2) {
 		if (!PlayLayer::init(level, p1, p2)) {
@@ -48,8 +88,8 @@ class $modify(DTPlayLayer, PlayLayer) {
 	void postUpdate(float dt) {
 		PlayLayer::postUpdate(dt);
 
-		if (!m_fields->isCheatedRun && !m_level->isPlatformer() && !m_isPracticeMode && CheatGuard::isGameplayCheated()) {
-			m_fields->isCheatedRun = true;
+		if (!m_fields->isCheatedRun && !m_level->isPlatformer() && !m_isPracticeMode && isRunCheated()) {
+			log::info("Run marked as cheated on level {}", m_level->m_levelID.value());
 		}
 
 		if (m_fields->pvpOverlay) {
@@ -60,12 +100,14 @@ class $modify(DTPlayLayer, PlayLayer) {
 	void destroyPlayer(PlayerObject * player, GameObject * p1) {
 		PlayLayer::destroyPlayer(player, p1);
 
+		checkNoclip(player, p1);
+
 		if (!player->m_isDead) {
 			return;
 		}
 
 		if (!m_level->isPlatformer() && !m_isPracticeMode) {
-			bool isCheated = m_fields->isCheatedRun || CheatGuard::isGameplayCheated();
+			bool isCheated = isRunCheated();
 			log::info("Run ended on level {} at {}%: {}", m_level->m_levelID.value(), this->getCurrentPercentInt(), isCheated ? "cheated" : "not cheated");
 
 			if (isCheated) {
@@ -86,7 +128,7 @@ class $modify(DTPlayLayer, PlayLayer) {
 		PlayLayer::levelComplete();
 
 		if (!m_isPracticeMode) {
-			bool isCheated = m_fields->isCheatedRun || CheatGuard::isGameplayCheated();
+			bool isCheated = isRunCheated();
 			log::info("Run completed on level {}: {}", m_level->m_levelID.value(), isCheated ? "cheated" : "not cheated");
 
 			if (isCheated) {
@@ -105,15 +147,19 @@ class $modify(DTPlayLayer, PlayLayer) {
 
 		m_fields->hasRespawned = true;
 		m_fields->isCheatedRun = CheatGuard::isGameplayCheated();
+		m_fields->noclipDetected = false;
+		m_fields->disabledCheatObject = nullptr;
 	}
 
 	void onQuit() {
 		delete m_fields->pvpOverlay;
 		m_fields->pvpOverlay = nullptr;
 
+		bool isCheated = isRunCheated();
+
 		PlayLayer::onQuit();
 
-		if (m_fields->isCheatedRun || CheatGuard::isGameplayCheated()) {
+		if (isCheated) {
 			log::info("Skipping gameplay API submissions because the run is cheated");
 		} else {
 			m_fields->attemptCounter.submit();
