@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cmath>
 
 using namespace geode::prelude;
 
@@ -105,6 +106,22 @@ std::string truncateLabel(std::string text, size_t maxLength) {
 	}
 
 	return text.substr(0, maxLength - 3) + "...";
+}
+
+std::string formatProgress(float value) {
+	auto rounded = std::round(value);
+	if (std::fabs(value - rounded) < 0.005f) {
+		return fmt::format("{}", static_cast<int>(rounded));
+	}
+
+	auto text = fmt::format("{:.2f}", value);
+	while (!text.empty() && text.back() == '0') {
+		text.pop_back();
+	}
+	if (!text.empty() && text.back() == '.') {
+		text.pop_back();
+	}
+	return text;
 }
 
 std::string getString(matjson::Value const& json, char const* key) {
@@ -897,8 +914,10 @@ void PvpOverlay::handleMessageRow(matjson::Value const& row, bool animateNew) {
 	message.senderUid = getString(row, "senderUid");
 	message.type = getString(row, "type");
 	message.senderAnonymous = getBool(row, "senderAnonymous") || getBool(row, "sender_anonymous");
+	auto isProgressSystemMessage = false;
 
 	if (message.type == "system") {
+		isProgressSystemMessage = getString(row["metadata"], "kind") == "progress";
 		message.content = this->formatSystemMessage(row["metadata"]);
 	} else {
 		message.content = getString(row, "content");
@@ -934,10 +953,10 @@ void PvpOverlay::handleMessageRow(matjson::Value const& row, bool animateNew) {
 		message.type,
 		message.senderUid,
 		message.id > previousLatest,
-		animateNew && message.id > previousLatest
+		animateNew && message.id > previousLatest && !isProgressSystemMessage
 	);
 
-	if (animateNew && message.id > previousLatest) {
+	if (animateNew && message.id > previousLatest && !isProgressSystemMessage) {
 		this->pushRecentMessage(message);
 	}
 
@@ -953,7 +972,12 @@ std::string PvpOverlay::formatSystemMessage(matjson::Value const& metadata) cons
 
 	auto kind = getString(metadata, "kind");
 	if (kind == "progress") {
-		return "";
+		auto progress = getNumber(metadata, "progress");
+		return fmt::format(
+			"{} reached {}% progress.",
+			systemParticipantLabel(getString(metadata, "uid"), m_currentUid),
+			formatProgress(progress)
+		);
 	}
 
 	if (kind == "match_end") {
