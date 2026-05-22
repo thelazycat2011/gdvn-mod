@@ -41,9 +41,9 @@ PvpSubmitter::PvpSubmitter(int levelID) : m_state(std::make_shared<State>(levelI
 			}
 		} catch (...) {
 			if (auto locked = state.lock()) {
-				log::warn("Failed to check active PvP match for level {}", locked->levelID);
+				log::warn("Failed to check active Versus match for level {}", locked->levelID);
 			} else {
-				log::warn("Failed to check active PvP match");
+				log::warn("Failed to check active Versus match");
 			}
 		}
 	});

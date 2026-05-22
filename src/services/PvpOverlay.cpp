@@ -360,7 +360,7 @@ protected:
 		}
 
 		m_overlay = overlay;
-		this->setTitle("PvP Chat");
+		this->setTitle("Versus Chat");
 
 		auto upSprite = ButtonSprite::create("Up", "goldFont.fnt", "GJ_button_01.png", 0.8f);
 		upSprite->setScale(0.4f);
@@ -548,7 +548,7 @@ void PvpOverlay::createLabel() {
 		return;
 	}
 
-	m_label = CCLabelBMFont::create("PvP\nYou: 0.00%\nOpponent: 0.00%", "bigFont.fnt");
+	m_label = CCLabelBMFont::create("Versus\nYou: 0.00%\nOpponent: 0.00%", "bigFont.fnt");
 	m_label->setScale(0.32f);
 	m_label->setOpacity(180);
 	m_label->setVisible(false);
@@ -603,7 +603,7 @@ void PvpOverlay::requestMatch() {
 				this->requestRealtimeToken();
 			}
 		} catch (...) {
-			log::warn("Failed to parse PvP overlay match snapshot");
+			log::warn("Failed to parse Versus overlay match snapshot");
 		}
 	});
 }
@@ -673,7 +673,7 @@ void PvpOverlay::requestRealtimeToken() {
 		}
 
 		if (!res.ok()) {
-			log::warn("Failed to get PvP realtime token: HTTP {}", res.code());
+			log::warn("Failed to get Versus realtime token: HTTP {}", res.code());
 			return;
 		}
 
@@ -685,7 +685,7 @@ void PvpOverlay::requestRealtimeToken() {
 			m_realtimeTokenExpiresAt = getInteger(json, "expiresAt");
 			this->connectRealtime();
 		} catch (...) {
-			log::warn("Failed to parse PvP realtime token");
+			log::warn("Failed to parse Versus realtime token");
 		}
 	});
 }
@@ -725,14 +725,14 @@ void PvpOverlay::requestMessages(bool animateNew, bool incremental) {
 		}
 
 		if (!res.ok()) {
-			log::warn("Failed to load PvP chat messages: HTTP {}", res.code());
+			log::warn("Failed to load Versus chat messages: HTTP {}", res.code());
 			return;
 		}
 
 		try {
 			this->handleMessagesPayload(res.json().unwrap(), animateNew);
 		} catch (...) {
-			log::warn("Failed to parse PvP chat messages");
+			log::warn("Failed to parse Versus chat messages");
 		}
 	});
 }
@@ -777,19 +777,19 @@ void PvpOverlay::submitChatMessage(std::string content) {
 		}
 
 		if (!res.ok()) {
-			log::warn("Failed to send PvP chat message: HTTP {}", res.code());
+			log::warn("Failed to send Versus chat message: HTTP {}", res.code());
 			if (m_chatPopup) {
 				m_chatPopup->setSending(false);
 				m_chatPopup->setStatus("Failed to send message");
 			}
-			Notification::create("Failed to send PvP chat message", NotificationIcon::Error, 2.0f)->show();
+			Notification::create("Failed to send Versus chat message", NotificationIcon::Error, 2.0f)->show();
 			return;
 		}
 
 		try {
 			this->handleMessageRow(res.json().unwrap(), true);
 		} catch (...) {
-			log::warn("Failed to parse sent PvP chat message");
+			log::warn("Failed to parse sent Versus chat message");
 		}
 
 		if (m_chatPopup) {
@@ -843,7 +843,7 @@ void PvpOverlay::onRealtimeMessage(std::string const& message) {
 		auto json = matjson::parse(message).unwrap();
 		this->handleRealtimeMessage(json);
 	} catch (...) {
-		log::warn("Failed to parse PvP realtime message");
+		log::warn("Failed to parse Versus realtime message");
 	}
 }
 
@@ -864,7 +864,7 @@ void PvpOverlay::handleRealtimeMessage(matjson::Value const& json) {
 		if (getString(json["payload"], "status") == "ok") {
 			m_joined = true;
 		} else {
-			log::warn("Failed to join PvP realtime channel");
+			log::warn("Failed to join Versus realtime channel");
 			if (!m_realtimeAccessToken.empty()) {
 				m_realtimeAccessToken.clear();
 				this->sendJoin();
@@ -894,7 +894,7 @@ void PvpOverlay::handleRealtimeMessage(matjson::Value const& json) {
 				this->scheduleMessageRefresh();
 			} else if (table == "pvpMatchMessages") {
 				log::info(
-					"PvP realtime chat event received: match={}, id={}",
+					"Versus realtime chat event received: match={}, id={}",
 					getInteger(row, "matchId"),
 					getInteger(row, "id")
 				);
@@ -1013,7 +1013,7 @@ void PvpOverlay::handleMessageRow(matjson::Value const& row, bool animateNew) {
 	}
 
 	log::info(
-		"PvP chat message received: match={}, id={}, type={}, sender={}, new={}, toast={}",
+		"Versus chat message received: match={}, id={}, type={}, sender={}, new={}, toast={}",
 		m_matchID,
 		message.id,
 		message.type,
@@ -1404,7 +1404,7 @@ void PvpOverlay::refreshLabel() {
 	m_lastCountdownSeconds = countdownSeconds;
 
 	m_label->setString(fmt::format(
-		"PvP{}\nYou: {}\nOpponent: {}",
+		"Versus{}\nYou: {}\nOpponent: {}",
 		timerLine,
 		formatProgressLabel(m_self.progress),
 		formatProgressLabel(m_opponent.progress)
