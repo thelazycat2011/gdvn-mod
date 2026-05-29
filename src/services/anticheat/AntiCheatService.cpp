@@ -8,6 +8,15 @@
 
 using namespace geode::prelude;
 
+namespace {
+template <class Function>
+void withConfigBasedCheatChecks(Function&& function) {
+    if constexpr (gdvn::config::ENABLE_CONFIG_BASED_CHEAT_CHECKS) {
+        function();
+    }
+}
+} // namespace
+
 AntiCheatService::AntiCheatService() {
 }
 
@@ -15,26 +24,34 @@ AntiCheatService::AntiCheatService(PlayLayer* playLayer) : playLayer(playLayer) 
 }
 
 std::optional<std::string_view> AntiCheatService::getCheatedReason() const {
-    if (startPositionAntiCheat.isCheated()) {
-        return startPositionAntiCheat.getCheatReason();
-    }
+    std::optional<std::string_view> configBasedReason;
+    withConfigBasedCheatChecks([&] {
+        if (eclipseAntiCheat.isCheated()) {
+            configBasedReason = eclipseAntiCheat.getCheatReason();
+            return;
+        }
 
-    if (eclipseAntiCheat.isCheated()) {
-        return eclipseAntiCheat.getCheatReason();
-    }
-
-    if constexpr (gdvn::config::ENABLE_CONFIG_BASED_CHEAT_CHECKS) {
         if (qolModAntiCheat.isCheated()) {
-            return qolModAntiCheat.getCheatReason();
+            configBasedReason = qolModAntiCheat.getCheatReason();
+            return;
         }
 
         if (prismAntiCheat.isCheated()) {
-            return prismAntiCheat.getCheatReason();
+            configBasedReason = prismAntiCheat.getCheatReason();
+            return;
         }
+
+        if (openHackAntiCheat.isCheated()) {
+            configBasedReason = openHackAntiCheat.getCheatReason();
+        }
+    });
+
+    if (configBasedReason) {
+        return configBasedReason;
     }
 
-    if (openHackAntiCheat.isCheated()) {
-        return openHackAntiCheat.getCheatReason();
+    if (startPositionAntiCheat.isCheated()) {
+        return startPositionAntiCheat.getCheatReason();
     }
 
     if (damageBypassAntiCheat.isCheated()) {
@@ -54,10 +71,12 @@ void AntiCheatService::reset(PlayLayer* playLayer) {
     reportedCheatReason.clear();
 
     startPositionAntiCheat.reset(playLayer);
-    eclipseAntiCheat.reset(playLayer);
-    qolModAntiCheat.reset(playLayer);
-    prismAntiCheat.reset(playLayer);
-    openHackAntiCheat.reset(playLayer);
+    withConfigBasedCheatChecks([&] {
+        eclipseAntiCheat.reset(playLayer);
+        qolModAntiCheat.reset(playLayer);
+        prismAntiCheat.reset(playLayer);
+        openHackAntiCheat.reset(playLayer);
+    });
     damageBypassAntiCheat.reset(playLayer);
     noclipAntiCheat.reset(playLayer);
 
@@ -87,10 +106,12 @@ void AntiCheatService::markRunCheatedIfNeeded() const {
 
 void AntiCheatService::onUpdate(float dt) {
     startPositionAntiCheat.onUpdate(dt);
-    eclipseAntiCheat.onUpdate(dt);
-    qolModAntiCheat.onUpdate(dt);
-    prismAntiCheat.onUpdate(dt);
-    openHackAntiCheat.onUpdate(dt);
+    withConfigBasedCheatChecks([&] {
+        eclipseAntiCheat.onUpdate(dt);
+        qolModAntiCheat.onUpdate(dt);
+        prismAntiCheat.onUpdate(dt);
+        openHackAntiCheat.onUpdate(dt);
+    });
     damageBypassAntiCheat.onUpdate(dt);
     noclipAntiCheat.onUpdate(dt);
 

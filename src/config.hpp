@@ -19,6 +19,9 @@ inline std::string getToken() {
     return geode::Mod::get()->getSavedValue<std::string>("api-key");
 }
 
+#if BUILD_RELWITHDEBINFO
+constexpr bool ENABLE_CONFIG_BASED_CHEAT_CHECKS = false;
+#else
 constexpr bool ENABLE_CONFIG_BASED_CHEAT_CHECKS = true;
-
+#endif
 } // namespace gdvn::config
