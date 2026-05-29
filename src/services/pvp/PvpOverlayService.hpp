@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../clients/pvp/PvpRealtimeClient.hpp"
 #include "../../dtos/pvp/match/PvpMatchPlayerProgressDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRealtimeMessageDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRowDto.hpp"
@@ -10,7 +11,6 @@
 #include "../../models/pvp/overlay/PvpOverlayChatMessageModel.hpp"
 #include "../../models/pvp/overlay/PvpOverlayPlayerProgressModel.hpp"
 #include "../../models/pvp/overlay/PvpOverlayRecentChatMessageModel.hpp"
-#include "PvpRealtimeSocketService.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 #include <Geode/binding/PlayLayer.hpp>
@@ -24,7 +24,7 @@ using namespace geode::prelude;
 class PvpChatPopupService;
 class PvpSubmitterService;
 
-class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
+class PvpOverlayService final : public PvpRealtimeClientDelegate {
   public:
     explicit PvpOverlayService(PlayLayer* layer, int levelID, PvpSubmitterService* submitter = nullptr);
     ~PvpOverlayService() override;
@@ -44,7 +44,7 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     std::vector<std::string> getChatHistoryLines() const;
 
     void onRealtimeOpen() override;
-    void onRealtimeMessage(std::string const& message) override;
+    void onRealtimeMessage(PvpMatchRealtimeMessageDto const& message) override;
     void onRealtimeClose() override;
 
   private:
@@ -53,13 +53,11 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     CCNode* m_chatStack = nullptr;
     PvpChatPopupService* m_chatPopup = nullptr;
     PvpSubmitterService* m_submitter = nullptr;
-    std::shared_ptr<PvpRealtimeSocketService> m_socket;
+    std::shared_ptr<PvpRealtimeClient> m_socket;
 
     int m_levelID = 0;
     int m_matchID = 0;
-    int m_ref = 1;
     int m_reconnectAttempts = 0;
-    float m_heartbeatTimer = 0.0f;
     float m_reconnectTimer = -1.0f;
     float m_messageRefreshTimer = -1.0f;
     float m_chatGraceTimer = -1.0f;
@@ -69,7 +67,6 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     bool m_chatSending = false;
     bool m_cleanedUp = false;
     bool m_connecting = false;
-    bool m_joined = false;
     bool m_requestingRealtimeToken = false;
 
     std::int64_t m_latestMessageID = 0;
@@ -80,7 +77,6 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     std::string m_supabaseUrl;
     std::string m_anonKey;
     std::string m_realtimeAccessToken;
-    std::string m_topic;
     std::string m_mode = "classic";
     PvpOverlayPlayerProgressModel m_self;
     PvpOverlayPlayerProgressModel m_opponent;
@@ -96,10 +92,6 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     void closeSocket();
     void scheduleReconnect();
     void scheduleMessageRefresh();
-    void sendJoin();
-    void sendHeartbeat();
-    void sendJson(matjson::Value const& json);
-    void handleRealtimeMessage(PvpMatchRealtimeMessageDto const& message);
     void handleResultRow(PvpMatchPlayerProgressDto const& row);
     void handleMatchRow(PvpMatchRowDto const& row);
     void handleMessagesPayload(PvpMessagesResponseDto const& messages, bool animateNew);
@@ -122,5 +114,4 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     bool isCompletedStatus(std::string const& status) const;
     bool isPlatformerMode() const;
     std::string formatProgressLabel(float progress) const;
-    std::string nextRef();
 };

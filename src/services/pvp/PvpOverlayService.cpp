@@ -24,7 +24,6 @@
 using namespace geode::prelude;
 
 namespace gdvn::pvp_overlay_detail {
-constexpr float HEARTBEAT_INTERVAL = 25.0f;
 constexpr float LABEL_MARGIN = 8.0f;
 constexpr float CHAT_MARGIN = 8.0f;
 constexpr float CHAT_MESSAGE_LIFETIME = 8.0f;
@@ -39,25 +38,6 @@ constexpr int MAX_CHAT_MESSAGE_LENGTH = 500;
 constexpr int MESSAGE_FETCH_LIMIT = 100;
 
 PvpOverlayService* s_activeOverlay = nullptr;
-
-std::string trimTrailingSlash(std::string value) {
-    while (!value.empty() && value.back() == '/') {
-        value.pop_back();
-    }
-    return value;
-}
-
-std::string realtimeUrl(std::string url, std::string const& anonKey) {
-    url = trimTrailingSlash(std::move(url));
-
-    if (url.rfind("https://", 0) == 0) {
-        url.replace(0, 5, "wss");
-    } else if (url.rfind("http://", 0) == 0) {
-        url.replace(0, 4, "ws");
-    }
-
-    return url + "/realtime/v1/websocket?apikey=" + anonKey + "&vsn=1.0.0";
-}
 
 std::string trimCopy(std::string value) {
     auto begin = std::find_if_not(value.begin(), value.end(), [=](unsigned char c) { return std::isspace(c); });
@@ -198,15 +178,6 @@ std::string formatCountdown(std::int64_t seconds) {
     const auto minutes = seconds / 60;
     const auto secs = seconds % 60;
     return fmt::format("{}:{:02}", minutes, secs);
-}
-
-matjson::Value makeChange(std::string const& event, std::string const& table, std::string const& filter) {
-    auto change = matjson::Value::object();
-    change["event"] = event;
-    change["schema"] = "public";
-    change["table"] = table;
-    change["filter"] = filter;
-    return change;
 }
 
 } // namespace gdvn::pvp_overlay_detail
@@ -713,14 +684,9 @@ void PvpOverlayService::connectRealtime() {
     }
 
     m_connecting = true;
-    m_joined = false;
-    m_heartbeatTimer = 0.0f;
-    m_topic = "realtime:gdvn-pvp-" + std::to_string(m_matchID);
 
-    auto socket = PvpRealtimeSocketService::create(this);
-    auto url = realtimeUrl(m_supabaseUrl, m_anonKey);
-
-    if (!socket->connect(url)) {
+    auto socket = PvpRealtimeClient::create(this);
+    if (!socket->connect(m_supabaseUrl, m_anonKey, m_matchID, m_realtimeAccessToken)) {
         m_connecting = false;
         this->scheduleReconnect();
         return;
@@ -736,60 +702,33 @@ void PvpOverlayService::onRealtimeOpen() {
 
     m_connecting = false;
     m_reconnectAttempts = 0;
-    this->sendJoin();
 }
 
-void PvpOverlayService::onRealtimeMessage(std::string const& message) {
-    if (!m_socket || m_cleanedUp || message.empty()) {
+void PvpOverlayService::onRealtimeMessage(PvpMatchRealtimeMessageDto const& message) {
+    if (!m_socket || m_cleanedUp || !message.valid) {
         return;
     }
 
-    auto dto = PvpMatchAdapter::realtimeMessageFromString(message);
-    if (!dto.valid) {
-        log::warn("Failed to parse Versus realtime message");
-        return;
+    if (message.table == "pvpMatchResults") {
+        this->handleResultRow(PvpMatchAdapter::playerProgressFromJson(message.row));
+        this->refreshLabel();
+        this->scheduleMessageRefresh();
+    } else if (message.table == "pvpMatches") {
+        this->handleMatchRow(PvpMatchAdapter::matchRowFromJson(message.row));
+        this->scheduleMessageRefresh();
+    } else if (message.table == "pvpMatchMessages") {
+        log::info("Versus realtime chat event received: match={}, id={}", message.rowMatchID, message.rowID);
+        this->handleMessageRow(PvpMessageAdapter::fromJson(message.row), true);
+        this->scheduleMessageRefresh();
     }
-
-    this->handleRealtimeMessage(dto);
 }
 
 void PvpOverlayService::onRealtimeClose() {
     m_socket.reset();
     m_connecting = false;
-    m_joined = false;
 
     if (!m_cleanedUp && m_chatOpen) {
         this->scheduleReconnect();
-    }
-}
-
-void PvpOverlayService::handleRealtimeMessage(PvpMatchRealtimeMessageDto const& message) {
-    if (message.event == "phx_reply") {
-        if (message.replyOk) {
-            m_joined = true;
-        } else {
-            log::warn("Failed to join Versus realtime channel");
-            if (!m_realtimeAccessToken.empty()) {
-                m_realtimeAccessToken.clear();
-                this->sendJoin();
-            }
-        }
-        return;
-    }
-
-    if (message.event == "postgres_changes") {
-        if (message.table == "pvpMatchResults") {
-            this->handleResultRow(PvpMatchAdapter::playerProgressFromJson(message.row));
-            this->refreshLabel();
-            this->scheduleMessageRefresh();
-        } else if (message.table == "pvpMatches") {
-            this->handleMatchRow(PvpMatchAdapter::matchRowFromJson(message.row));
-            this->scheduleMessageRefresh();
-        } else if (message.table == "pvpMatchMessages") {
-            log::info("Versus realtime chat event received: match={}, id={}", message.rowMatchID, message.rowID);
-            this->handleMessageRow(PvpMessageAdapter::fromJson(message.row), true);
-            this->scheduleMessageRefresh();
-        }
     }
 }
 
@@ -1130,65 +1069,6 @@ void PvpOverlayService::updateRecentMessages(float dt) {
     this->refreshChatVisibility();
 }
 
-void PvpOverlayService::sendJoin() {
-    auto changes = matjson::Value::array();
-    auto matchID = std::to_string(m_matchID);
-    changes.push(makeChange("INSERT", "pvpMatchResults", "matchId=eq." + matchID));
-    changes.push(makeChange("UPDATE", "pvpMatchResults", "matchId=eq." + matchID));
-    changes.push(makeChange("UPDATE", "pvpMatches", "id=eq." + matchID));
-    changes.push(makeChange("INSERT", "pvpMatchMessages", "matchId=eq." + matchID));
-
-    auto broadcast = matjson::Value::object();
-    broadcast["ack"] = false;
-    broadcast["self"] = false;
-
-    auto presence = matjson::Value::object();
-    presence["enabled"] = false;
-
-    auto config = matjson::Value::object();
-    config["broadcast"] = broadcast;
-    config["presence"] = presence;
-    config["postgres_changes"] = changes;
-    config["private"] = false;
-
-    auto payload = matjson::Value::object();
-    payload["config"] = config;
-    if (!m_realtimeAccessToken.empty()) {
-        payload["access_token"] = m_realtimeAccessToken;
-    }
-
-    auto ref = this->nextRef();
-    auto message = matjson::Value::object();
-    message["topic"] = m_topic;
-    message["event"] = "phx_join";
-    message["payload"] = payload;
-    message["ref"] = ref;
-    message["join_ref"] = ref;
-
-    this->sendJson(message);
-}
-
-void PvpOverlayService::sendHeartbeat() {
-    auto message = matjson::Value::object();
-    message["topic"] = "phoenix";
-    message["event"] = "heartbeat";
-    message["payload"] = matjson::Value::object();
-    message["ref"] = this->nextRef();
-    this->sendJson(message);
-}
-
-void PvpOverlayService::sendJson(matjson::Value const& json) {
-    if (!m_socket || !m_socket->isOpen()) {
-        return;
-    }
-
-    m_socket->send(json.dump(matjson::NO_INDENTATION));
-}
-
-std::string PvpOverlayService::nextRef() {
-    return std::to_string(m_ref++);
-}
-
 void PvpOverlayService::update(float dt) {
     if (m_cleanedUp) {
         return;
@@ -1244,12 +1124,8 @@ void PvpOverlayService::update(float dt) {
         return;
     }
 
-    if (m_socket && m_socket->isOpen()) {
-        m_heartbeatTimer += dt;
-        if (m_heartbeatTimer >= HEARTBEAT_INTERVAL) {
-            m_heartbeatTimer = 0.0f;
-            this->sendHeartbeat();
-        }
+    if (m_socket) {
+        m_socket->update(dt);
     }
 }
 
@@ -1270,7 +1146,6 @@ void PvpOverlayService::closeSocket() {
     auto socket = m_socket;
     m_socket.reset();
     m_connecting = false;
-    m_joined = false;
     socket->close();
 }
 
