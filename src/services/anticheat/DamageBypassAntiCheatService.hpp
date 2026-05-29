@@ -5,7 +5,10 @@
 
 #include <string_view>
 
-class PrismAntiCheatService {
+class DamageBypassAntiCheatService {
+  private:
+    PlayLayer* playLayer = nullptr;
+
   public:
     void reset(PlayLayer* playLayer);
     void onUpdate(float dt);

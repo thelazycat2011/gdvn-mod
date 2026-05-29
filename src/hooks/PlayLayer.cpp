@@ -20,8 +20,7 @@ using namespace geode::prelude;
 class $modify(DTPlayLayer, PlayLayer) {
     struct Fields {
         bool hasRespawned = false;
-        bool isCheatedRun = false;
-        std::string cheatReason;
+        AntiCheatService antiCheat;
         AttemptCounterService attemptCounter;
         DeathCounterService deathCounter;
         std::unique_ptr<EventSubmitterService> eventSubmitter;
@@ -35,10 +34,6 @@ class $modify(DTPlayLayer, PlayLayer) {
 
     static void onModify(auto& self) {
         (void)self.setHookPriorityPre("PlayLayer::destroyPlayer", Priority::First);
-    }
-
-    bool isDamageBypassActive() {
-        return m_isIgnoreDamageEnabled || m_ignoreDamage;
     }
 
     void submitPvpPlayModeIfChanged(bool force = false) {
@@ -55,42 +50,6 @@ class $modify(DTPlayLayer, PlayLayer) {
         }
     }
 
-    void markRunCheated(std::string const& reason) {
-        if (m_fields->isCheatedRun) {
-            return;
-        }
-
-        m_fields->isCheatedRun = true;
-        m_fields->cheatReason = reason;
-        log::warn("Run marked as cheated on level {}: {}", m_level->m_levelID.value(), reason);
-    }
-
-    void refreshAntiCheatReason() {
-        if (m_fields->isCheatedRun) {
-            return;
-        }
-
-        if (auto reason = AntiCheatService::getGameplayCheatReason()) {
-            markRunCheated(std::string(*reason));
-        }
-    }
-
-    bool isRunCheated() {
-        refreshAntiCheatReason();
-
-        if (!m_fields->isCheatedRun && isDamageBypassActive()) {
-            markRunCheated("damage bypass");
-        }
-
-        return m_fields->isCheatedRun;
-    }
-
-    void checkNoclip(PlayerObject* player) {
-        if (!m_fields->isCheatedRun && !player->m_isDead && !m_levelEndAnimationStarted) {
-            markRunCheated("noclip");
-        }
-    }
-
     bool init(GJGameLevel* level, bool p1, bool p2) {
         if (!PlayLayer::init(level, p1, p2)) {
             return false;
@@ -104,7 +63,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->raidSubmitter = std::make_unique<RaidSubmitterService>(id);
         m_fields->lastPracticeMode = m_isPracticeMode;
         m_fields->pvpSubmitter = std::make_unique<PvpSubmitterService>(id, m_isPracticeMode ? "practice" : "normal");
-        refreshAntiCheatReason();
+        m_fields->antiCheat.reset(this);
 
         if (AuthService::isLoggedIn() && !m_isPracticeMode) {
             m_fields->pvpOverlay = std::make_unique<PvpOverlayService>(this, id, m_fields->pvpSubmitter.get());
@@ -117,7 +76,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         PlayLayer::postUpdate(dt);
 
         if (!m_level->isPlatformer() && !m_isPracticeMode) {
-            isRunCheated();
+            m_fields->antiCheat.onUpdate(dt);
         }
 
         if (m_fields->pvpOverlay) {
@@ -139,13 +98,13 @@ class $modify(DTPlayLayer, PlayLayer) {
             return;
         }
 
-        checkNoclip(player);
+        m_fields->antiCheat.onPlayerDestroyed(player);
 
         if (!player->m_isDead) {
             return;
         }
 
-        bool isCheated = isRunCheated();
+        bool isCheated = m_fields->antiCheat.isCheated();
         log::info("Run ended on level {} at {}%: {}", m_level->m_levelID.value(), this->getCurrentPercentInt(),
                   isCheated ? "cheated" : "not cheated");
 
@@ -171,7 +130,7 @@ class $modify(DTPlayLayer, PlayLayer) {
                 return;
             }
 
-            bool isCheated = isRunCheated();
+            bool isCheated = m_fields->antiCheat.isCheated();
             log::info("Run completed on level {}: {}", m_level->m_levelID.value(),
                       isCheated ? "cheated" : "not cheated");
 
@@ -213,14 +172,12 @@ class $modify(DTPlayLayer, PlayLayer) {
             m_fields->platformerCheckpointCount = 0;
         }
         m_fields->hasRespawned = true;
-        m_fields->isCheatedRun = false;
-        m_fields->cheatReason.clear();
-        refreshAntiCheatReason();
+        m_fields->antiCheat.reset(this);
     }
 
     void onQuit() {
         m_fields->pvpOverlay.reset();
-        bool isCheated = isRunCheated();
+        bool isCheated = m_fields->antiCheat.isCheated();
 
         if (isCheated) {
             log::info("Skipping gameplay API submissions because the run is cheated");

@@ -1,6 +1,14 @@
 #pragma once
 
+#include <Geode/Geode.hpp>
+#include <Geode/binding/PlayLayer.hpp>
+
+#include <string_view>
+
 class EclipseAntiCheatService {
   public:
-    static bool isCheated();
+    void reset(PlayLayer* playLayer);
+    void onUpdate(float dt);
+    bool isCheated() const;
+    std::string_view getCheatReason() const;
 };

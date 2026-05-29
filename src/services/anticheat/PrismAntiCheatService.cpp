@@ -46,7 +46,13 @@ float getSavedFloat(std::vector<matjson::Value> const& values, std::string_view 
 
 } // namespace
 
-bool PrismAntiCheatService::isCheated() {
+void PrismAntiCheatService::reset(PlayLayer*) {
+}
+
+void PrismAntiCheatService::onUpdate(float) {
+}
+
+bool PrismAntiCheatService::isCheated() const {
     auto mod = geode::Loader::get()->getLoadedMod("firee.prism");
     if (!mod) {
         return false;
@@ -87,4 +93,8 @@ bool PrismAntiCheatService::isCheated() {
     }
 
     return differsFrom(getSavedFloat(values, "TPS Bypass", 240.0f), 240.0f);
+}
+
+std::string_view PrismAntiCheatService::getCheatReason() const {
+    return "Prism config";
 }

@@ -97,7 +97,13 @@ VTable const& getVTable() {
 }
 } // namespace eclipse::__internal__
 
-bool EclipseAntiCheatService::isCheated() {
+void EclipseAntiCheatService::reset(PlayLayer*) {
+}
+
+void EclipseAntiCheatService::onUpdate(float) {
+}
+
+bool EclipseAntiCheatService::isCheated() const {
     if (!geode::Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
         return false;
     }
@@ -115,4 +121,8 @@ bool EclipseAntiCheatService::isCheated() {
     }
 
     return false;
+}
+
+std::string_view EclipseAntiCheatService::getCheatReason() const {
+    return "Eclipse cheat state";
 }

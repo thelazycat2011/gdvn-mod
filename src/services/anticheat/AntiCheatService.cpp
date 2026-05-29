@@ -1,49 +1,112 @@
 #include "AntiCheatService.hpp"
 
 #include "AntiCheatConfig.hpp"
-#include "EclipseAntiCheatService.hpp"
-#include "OpenHackAntiCheatService.hpp"
-#include "PrismAntiCheatService.hpp"
-#include "QolModAntiCheatService.hpp"
-#include <Geode/Geode.hpp>
-#include <Geode/binding/PlayLayer.hpp>
 
 #include <optional>
+#include <string>
 #include <string_view>
 
-namespace {
-bool isStartPositionRun() {
-    auto playLayer = PlayLayer::get();
-    return playLayer && playLayer->m_startPosObject;
-}
-} // namespace
+using namespace geode::prelude;
 
-bool AntiCheatService::isGameplayCheated() {
-    return AntiCheatService::getGameplayCheatReason().has_value();
+AntiCheatService::AntiCheatService() {
 }
 
-std::optional<std::string_view> AntiCheatService::getGameplayCheatReason() {
-    if (isStartPositionRun()) {
-        return "start position";
+AntiCheatService::AntiCheatService(PlayLayer* playLayer) : playLayer(playLayer) {
+}
+
+std::optional<std::string_view> AntiCheatService::getCheatedReason() const {
+    if (startPositionAntiCheat.isCheated()) {
+        return startPositionAntiCheat.getCheatReason();
     }
 
-    if (EclipseAntiCheatService::isCheated()) {
-        return "Eclipse cheat state";
+    if (eclipseAntiCheat.isCheated()) {
+        return eclipseAntiCheat.getCheatReason();
     }
 
     if constexpr (gdvn::anti_cheat::ENABLE_CONFIG_BASED_CHEAT_CHECKS) {
-        if (QolModAntiCheatService::isCheated()) {
-            return "QOLMod config";
+        if (qolModAntiCheat.isCheated()) {
+            return qolModAntiCheat.getCheatReason();
         }
 
-        if (PrismAntiCheatService::isCheated()) {
-            return "Prism config";
+        if (prismAntiCheat.isCheated()) {
+            return prismAntiCheat.getCheatReason();
         }
     }
 
-    if (OpenHackAntiCheatService::isCheated()) {
-        return "OpenHack runtime state";
+    if (openHackAntiCheat.isCheated()) {
+        return openHackAntiCheat.getCheatReason();
+    }
+
+    if (damageBypassAntiCheat.isCheated()) {
+        return damageBypassAntiCheat.getCheatReason();
+    }
+
+    if (noclipAntiCheat.isCheated()) {
+        return noclipAntiCheat.getCheatReason();
     }
 
     return std::nullopt;
+}
+
+void AntiCheatService::reset(PlayLayer* playLayer) {
+    this->playLayer = playLayer;
+    reportedCheat = false;
+    reportedCheatReason.clear();
+
+    startPositionAntiCheat.reset(playLayer);
+    eclipseAntiCheat.reset(playLayer);
+    qolModAntiCheat.reset(playLayer);
+    prismAntiCheat.reset(playLayer);
+    openHackAntiCheat.reset(playLayer);
+    damageBypassAntiCheat.reset(playLayer);
+    noclipAntiCheat.reset(playLayer);
+
+    markRunCheatedIfNeeded();
+}
+
+void AntiCheatService::markRunCheated(std::string const& reason) {
+    if (reportedCheat) {
+        return;
+    }
+
+    reportedCheat = true;
+    reportedCheatReason = reason;
+
+    if (playLayer && playLayer->m_level) {
+        log::warn("Run marked as cheated on level {}: {}", playLayer->m_level->m_levelID.value(), reason);
+    } else {
+        log::warn("Run marked as cheated: {}", reason);
+    }
+}
+
+void AntiCheatService::markRunCheatedIfNeeded() {
+    if (auto reason = getCheatedReason()) {
+        markRunCheated(std::string(*reason));
+    }
+}
+
+void AntiCheatService::onUpdate(float dt) {
+    startPositionAntiCheat.onUpdate(dt);
+    eclipseAntiCheat.onUpdate(dt);
+    qolModAntiCheat.onUpdate(dt);
+    prismAntiCheat.onUpdate(dt);
+    openHackAntiCheat.onUpdate(dt);
+    damageBypassAntiCheat.onUpdate(dt);
+    noclipAntiCheat.onUpdate(dt);
+
+    markRunCheatedIfNeeded();
+}
+
+void AntiCheatService::onPlayerDestroyed(PlayerObject* player) {
+    noclipAntiCheat.onPlayerDestroyed(player);
+    markRunCheatedIfNeeded();
+}
+
+bool AntiCheatService::isCheated() {
+    markRunCheatedIfNeeded();
+    return getCheatedReason().has_value();
+}
+
+std::string const& AntiCheatService::getCheatReason() const {
+    return reportedCheatReason;
 }

@@ -6,7 +6,13 @@
 #include <Geode/platform/windows.hpp>
 #endif
 
-bool OpenHackAntiCheatService::isCheated() {
+void OpenHackAntiCheatService::reset(PlayLayer*) {
+}
+
+void OpenHackAntiCheatService::onUpdate(float) {
+}
+
+bool OpenHackAntiCheatService::isCheated() const {
     if (!geode::Loader::get()->getLoadedMod("prevter.openhack")) {
         return false;
     }
@@ -23,4 +29,8 @@ bool OpenHackAntiCheatService::isCheated() {
 #else
     return false;
 #endif
+}
+
+std::string_view OpenHackAntiCheatService::getCheatReason() const {
+    return "OpenHack runtime state";
 }

@@ -5,7 +5,10 @@
 
 #include <string_view>
 
-class PrismAntiCheatService {
+class StartPositionAntiCheatService {
+  private:
+    PlayLayer* playLayer = nullptr;
+
   public:
     void reset(PlayLayer* playLayer);
     void onUpdate(float dt);

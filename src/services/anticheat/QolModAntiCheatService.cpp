@@ -13,7 +13,13 @@ bool isModuleEnabled(geode::Mod* mod, std::string const& id, bool defaultValue =
 
 } // namespace
 
-bool QolModAntiCheatService::isCheated() {
+void QolModAntiCheatService::reset(PlayLayer*) {
+}
+
+void QolModAntiCheatService::onUpdate(float) {
+}
+
+bool QolModAntiCheatService::isCheated() const {
     auto mod = geode::Loader::get()->getLoadedMod("thesillydoggo.qolmod");
 
     if (!mod) {
@@ -72,4 +78,8 @@ bool QolModAntiCheatService::isCheated() {
     }
 
     return false;
+}
+
+std::string_view QolModAntiCheatService::getCheatReason() const {
+    return "QOLMod config";
 }
