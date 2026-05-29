@@ -52,9 +52,6 @@ void PrismAntiCheatService::reset(PlayLayer*) {
 void PrismAntiCheatService::onUpdate(float) {
 }
 
-void PrismAntiCheatService::onPlayerDestroyed(PlayerObject*) {
-}
-
 bool PrismAntiCheatService::isCheated() const {
     auto mod = geode::Loader::get()->getLoadedMod("firee.prism");
     if (!mod) {

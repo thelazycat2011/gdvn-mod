@@ -103,9 +103,6 @@ void EclipseAntiCheatService::reset(PlayLayer*) {
 void EclipseAntiCheatService::onUpdate(float) {
 }
 
-void EclipseAntiCheatService::onPlayerDestroyed(PlayerObject*) {
-}
-
 bool EclipseAntiCheatService::isCheated() const {
     if (!geode::Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
         return false;

@@ -12,9 +12,6 @@ void OpenHackAntiCheatService::reset(PlayLayer*) {
 void OpenHackAntiCheatService::onUpdate(float) {
 }
 
-void OpenHackAntiCheatService::onPlayerDestroyed(PlayerObject*) {
-}
-
 bool OpenHackAntiCheatService::isCheated() const {
     if (!geode::Loader::get()->getLoadedMod("prevter.openhack")) {
         return false;
