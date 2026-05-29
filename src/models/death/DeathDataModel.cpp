@@ -1,15 +1,15 @@
-#include "DeathData.hpp"
+#include "DeathDataModel.hpp"
 
-DeathData::DeathData() {
+DeathDataModel::DeathDataModel() {
 }
 
-DeathData::DeathData(int id, bool a, std::array<size_t, 100> b) {
+DeathDataModel::DeathDataModel(int id, bool a, std::array<size_t, 100> b) {
     levelID = id;
     completed = a;
     cnt = b;
 }
 
-std::string DeathData::serialize() {
+std::string DeathDataModel::serialize() {
     std::string res;
 
     for (size_t i : cnt) {
@@ -21,7 +21,7 @@ std::string DeathData::serialize() {
     return res;
 }
 
-void DeathData::addDeathCount(int percent) {
+void DeathDataModel::addDeathCount(int percent) {
     if (completed) {
         return;
     }
@@ -33,10 +33,10 @@ void DeathData::addDeathCount(int percent) {
     cnt[percent]++;
 }
 
-bool DeathData::isCompleted() {
+bool DeathDataModel::isCompleted() {
     return completed;
 }
 
-void DeathData::setCompleted() {
+void DeathDataModel::setCompleted() {
     completed = true;
 }

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../../utils/DeathData.hpp"
+#include "../../models/death/DeathDataModel.hpp"
 #include <Geode/Geode.hpp>
 
 using namespace geode::prelude;
 
 class DeathCounterService {
   private:
-    DeathData deathData;
+    DeathDataModel deathData;
     bool completed = false;
 
   public:

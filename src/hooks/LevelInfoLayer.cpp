@@ -1,14 +1,103 @@
+#include "../dtos/level/LevelListDto.hpp"
+#include "../factories/LevelInfoLayerFactory.hpp"
 #include "../services/auth/AuthService.hpp"
 #include "../services/level/LevelService.hpp"
-#include "../utils/LevelInfoLayerUtils.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp> // DO NOT REMOVE
 #include <Geode/utils/web.hpp>
 
 using namespace geode::prelude;
-using namespace gdvn::level_info;
 
-class $modify(LevelInfoLayer) {
+namespace {
+
+std::string formatNumber(double number) {
+    int integer = static_cast<int>(number);
+
+    if (number == static_cast<double>(integer)) {
+        return std::to_string(integer);
+    }
+
+    std::string formatted = fmt::format("{:.1f}", number);
+
+    while (formatted.size() > 1 && formatted.ends_with('0')) {
+        formatted.pop_back();
+    }
+
+    if (formatted.ends_with('.')) {
+        formatted.pop_back();
+    }
+
+    return formatted;
+}
+
+std::string getListValue(LevelListDto const& list) {
+    if (!list.item.position && !list.item.rating) {
+        return "";
+    }
+
+    std::vector<std::string> values;
+
+    if (list.isTopMode() && list.item.position) {
+        values.push_back("#" + formatNumber(*list.item.position));
+    }
+
+    if (list.item.rating) {
+        values.push_back(formatNumber(*list.item.rating) + "pt");
+    }
+
+    if (!list.isTopMode() && values.empty() && list.item.position) {
+        values.push_back("#" + formatNumber(*list.item.position));
+    }
+
+    std::string text;
+
+    for (auto& value : values) {
+        if (!text.empty()) {
+            text += " / ";
+        }
+
+        text += value;
+    }
+
+    return text;
+}
+
+std::vector<std::string> getListInfoLabels(std::vector<LevelListDto> const& lists, bool isLoggedIn) {
+    std::vector<std::string> officialLabels;
+    std::vector<std::string> starredLabels;
+
+    for (auto const& list : lists) {
+        std::string value = getListValue(list);
+
+        if (value.empty()) {
+            continue;
+        }
+
+        auto label = list.label() + ": " + value;
+
+        if (list.isStarredList()) {
+            starredLabels.push_back(label);
+        }
+
+        if (list.isOfficial) {
+            officialLabels.push_back(label);
+        }
+    }
+
+    auto labels = (isLoggedIn && !starredLabels.empty()) ? starredLabels : officialLabels;
+    bool hasMore = labels.size() > 5;
+
+    if (hasMore) {
+        labels.resize(5);
+        labels.push_back("...");
+    }
+
+    return labels;
+}
+
+} // namespace
+
+class $modify(GDVNLevelInfoLayer, LevelInfoLayer) {
     struct Fields {
         bool m_confirmedLoggedOutPlay = false;
     };
@@ -22,7 +111,7 @@ class $modify(LevelInfoLayer) {
         auto showLevelInfo = Mod::get()->getSettingValue<bool>("show-level-info");
 
         if (showLevelInfo) {
-            auto loadingLabel = createLabel(level, "...", 0);
+            auto loadingLabel = gdvn::level_info::LevelInfoLayerFactory::createLabel(level, "...", 0);
 
             this->addChild(loadingLabel);
 
@@ -55,7 +144,8 @@ class $modify(LevelInfoLayer) {
                 std::vector<std::string> labels = getListInfoLabels(model.lists, isLoggedIn);
 
                 if (!labels.empty()) {
-                    auto btn = ButtonCreator().create(labels, level, layer);
+                    auto btn = gdvn::level_info::LevelInfoLayerFactory::createButton(
+                        labels, level, layer, menu_selector(GDVNLevelInfoLayer::onGDVNLevelInfo));
 
                     layer->addChild(btn);
                 }
@@ -65,6 +155,13 @@ class $modify(LevelInfoLayer) {
         }
 
         return true;
+    }
+
+    void onGDVNLevelInfo(CCObject* sender) {
+        int id = sender->getTag();
+        std::string url = "https://www.gdvn.net/level/" + std::to_string(id);
+
+        web::openLinkInBrowser(url);
     }
 
     void onPlay(CCObject* sender) {

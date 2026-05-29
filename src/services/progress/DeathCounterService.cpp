@@ -8,7 +8,7 @@ DeathCounterService::DeathCounterService() {
 }
 
 DeathCounterService::DeathCounterService(int id, bool completed) {
-    deathData = DeathData(id, completed, {});
+    deathData = DeathDataModel(id, completed, {});
 }
 
 void DeathCounterService::add(int percent) {
