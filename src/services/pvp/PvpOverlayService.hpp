@@ -7,6 +7,9 @@
 #include "../../dtos/pvp/match/PvpMatchSystemMetadataDto.hpp"
 #include "../../dtos/pvp/PvpMessageDto.hpp"
 #include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
+#include "../../models/pvp/overlay/PvpOverlayChatMessageModel.hpp"
+#include "../../models/pvp/overlay/PvpOverlayPlayerProgressModel.hpp"
+#include "../../models/pvp/overlay/PvpOverlayRecentChatMessageModel.hpp"
 #include "PvpRealtimeSocketService.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CCMenuItemSpriteExtra.hpp>
@@ -45,26 +48,6 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     void onRealtimeClose() override;
 
   private:
-    struct PlayerProgress {
-        std::string uid;
-        float progress = 0.0f;
-        std::string playMode = "normal";
-    };
-
-    struct ChatMessage {
-        std::int64_t id = 0;
-        std::string senderUid;
-        std::string type;
-        std::string content;
-        bool senderAnonymous = false;
-    };
-
-    struct RecentChatMessage {
-        std::int64_t id = 0;
-        float timeLeft = 0.0f;
-        CCLabelBMFont* label = nullptr;
-    };
-
     PlayLayer* m_layer = nullptr;
     CCLabelBMFont* m_label = nullptr;
     CCNode* m_chatStack = nullptr;
@@ -99,10 +82,10 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     std::string m_realtimeAccessToken;
     std::string m_topic;
     std::string m_mode = "classic";
-    PlayerProgress m_self;
-    PlayerProgress m_opponent;
-    std::vector<ChatMessage> m_chatMessages;
-    std::vector<RecentChatMessage> m_recentMessages;
+    PvpOverlayPlayerProgressModel m_self;
+    PvpOverlayPlayerProgressModel m_opponent;
+    std::vector<PvpOverlayChatMessageModel> m_chatMessages;
+    std::vector<PvpOverlayRecentChatMessageModel> m_recentMessages;
 
     void createLabel();
     void createChatNodes();
@@ -124,9 +107,9 @@ class PvpOverlayService final : public PvpRealtimeSocketDelegateService {
     void handleSystemMetadata(PvpMatchSystemMetadataDto const& metadata);
     void parseMatchSnapshot(PvpMatchSnapshotDto const& snapshot);
     std::string formatSystemMessage(PvpMatchSystemMetadataDto const& metadata) const;
-    std::string formatPlayerLabel(std::string const& label, PlayerProgress const& player) const;
-    std::string getChatSenderLabel(ChatMessage const& message) const;
-    void pushRecentMessage(ChatMessage const& message);
+    std::string formatPlayerLabel(std::string const& label, PvpOverlayPlayerProgressModel const& player) const;
+    std::string getChatSenderLabel(PvpOverlayChatMessageModel const& message) const;
+    void pushRecentMessage(PvpOverlayChatMessageModel const& message);
     void layoutRecentMessages();
     void updateRecentMessages(float dt);
     void refreshLabel();

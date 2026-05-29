@@ -566,7 +566,7 @@ void PvpOverlayService::parseMatchSnapshot(PvpMatchSnapshotDto const& snapshot) 
 
     for (auto const& participant : snapshot.participants) {
         if (participant.valid) {
-            PlayerProgress player;
+            PvpOverlayPlayerProgressModel player;
             player.uid = participant.uid;
             player.progress = participant.progress;
 
@@ -855,7 +855,7 @@ void PvpOverlayService::handleMessageRow(PvpMessageDto const& dto, bool animateN
         return;
     }
 
-    ChatMessage message;
+    PvpOverlayChatMessageModel message;
     message.id = dto.id;
     message.senderUid = dto.senderUid;
     message.type = dto.type;
@@ -889,7 +889,7 @@ void PvpOverlayService::handleMessageRow(PvpMessageDto const& dto, bool animateN
 
     if (message.id > 0) {
         auto existing = std::find_if(m_chatMessages.begin(), m_chatMessages.end(),
-                                     [message](ChatMessage const& item) { return item.id == message.id; });
+                                     [message](PvpOverlayChatMessageModel const& item) { return item.id == message.id; });
 
         if (existing == m_chatMessages.end()) {
             m_chatMessages.push_back(message);
@@ -1010,7 +1010,7 @@ std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto con
     return "Match update.";
 }
 
-std::string PvpOverlayService::formatPlayerLabel(std::string const& label, PlayerProgress const& player) const {
+std::string PvpOverlayService::formatPlayerLabel(std::string const& label, PvpOverlayPlayerProgressModel const& player) const {
     auto modeSuffix = player.playMode == "practice" ? " (practice)" : "";
     return fmt::format("{}{}: {}", label, modeSuffix, formatProgressLabel(player.progress));
 }
@@ -1041,7 +1041,7 @@ std::vector<std::string> PvpOverlayService::getChatHistoryLines() const {
     return lines;
 }
 
-std::string PvpOverlayService::getChatSenderLabel(ChatMessage const& message) const {
+std::string PvpOverlayService::getChatSenderLabel(PvpOverlayChatMessageModel const& message) const {
     if (message.type == "system") {
         return "System";
     }
@@ -1053,7 +1053,7 @@ std::string PvpOverlayService::getChatSenderLabel(ChatMessage const& message) co
     return "Opponent";
 }
 
-void PvpOverlayService::pushRecentMessage(ChatMessage const& message) {
+void PvpOverlayService::pushRecentMessage(PvpOverlayChatMessageModel const& message) {
     if (!m_chatStack || m_chatMuted) {
         return;
     }
