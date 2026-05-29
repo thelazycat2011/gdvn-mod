@@ -1,5 +1,4 @@
 #include "VersionCheckerService.hpp"
-#include "../../adapters/GithubReleaseResponseAdapter.hpp"
 #include "../../clients/update/UpdateClient.hpp"
 #include <Geode/loader/Dirs.hpp>
 #include <Geode/loader/ModMetadata.hpp>
@@ -102,7 +101,7 @@ void VersionCheckerService::downloadUpdate() {
 }
 
 void VersionCheckerService::checkForUpdate(bool notifyIfCurrent) {
-	UpdateClient::getLatestRelease([&](web::WebResponse& res) {
+	UpdateClient::getLatestRelease([&](GithubReleaseResponseDto const& release, web::WebResponse& res) {
 		if (!res.ok()) {
 			if (notifyIfCurrent) {
 				showUpdateToast("Failed to check for GDVN updates", geode::NotificationIcon::Error);
@@ -110,13 +109,6 @@ void VersionCheckerService::checkForUpdate(bool notifyIfCurrent) {
 			return;
 		}
 
-		auto resJsonResult = res.json();
-		if (!resJsonResult) {
-			log::warn("Failed to check for updates: invalid response");
-			return;
-		}
-
-		auto release = gdvn::adapters::GithubReleaseResponseAdapter::fromJson(resJsonResult.unwrap());
 		if (!release.valid) {
 			return;
 		}

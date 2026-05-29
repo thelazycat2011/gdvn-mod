@@ -1,7 +1,4 @@
 #include "../auth/AuthService.hpp"
-#include "../../adapters/AuthMeResponseAdapter.hpp"
-#include "../../adapters/OtpGrantResponseAdapter.hpp"
-#include "../../adapters/OtpResponseAdapter.hpp"
 #include "../../clients/auth/AuthClient.hpp"
 #include "../../common.hpp"
 #include <Geode/ui/Notification.hpp>
@@ -52,21 +49,13 @@ void AuthService::login() {
 }
 
 void AuthService::requestOTP() {
-	AuthClient::postOTP([&](web::WebResponse& res) {
+	AuthClient::postOTP([&](OtpResponseDto const& otp, web::WebResponse& res) {
 		if (!res.ok()) {
 			log::warn("Failed to create OTP code: HTTP {}", res.code());
 			FLAlertLayer::create("Error", "Failed to create login code. Please try again.", "OK")->show();
 			return;
 		}
 
-		auto jsonResult = res.json();
-		if (!jsonResult) {
-			log::warn("Failed to create OTP code: invalid response");
-			FLAlertLayer::create("Error", "Failed to create login code. Please try again.", "OK")->show();
-			return;
-		}
-
-		auto otp = gdvn::adapters::OtpResponseAdapter::fromJson(jsonResult.unwrap());
 		if (!otp.valid) {
 			log::warn("Failed to create OTP code: invalid response");
 			FLAlertLayer::create("Error", "Failed to create login code. Please try again.", "OK")->show();
@@ -82,21 +71,12 @@ void AuthService::requestOTP() {
 }
 
 void AuthService::checkOTP(std::string code) {
-	AuthClient::getOTP(code, [&](web::WebResponse& res) {
+	AuthClient::getOTP(code, [&](OtpGrantResponseDto const& grant, web::WebResponse& res) {
 		if (!res.ok()) {
 			log::warn("Failed to verify OTP code: HTTP {}", res.code());
 			FLAlertLayer::create("Error", "Failed to verify login code. Please try again.", "OK")->show();
 			return;
 		}
-
-		auto jsonResult = res.json();
-		if (!jsonResult) {
-			log::warn("Failed to verify OTP code: invalid response");
-			FLAlertLayer::create("Error", "Failed to verify login code. Please try again.", "OK")->show();
-			return;
-		}
-
-		auto grant = gdvn::adapters::OtpGrantResponseAdapter::fromJson(jsonResult.unwrap());
 
 		if (!grant.granted) {
 			FLAlertLayer::create("GDVN Login", "Access has not been granted yet.\nPlease grant access on the website first.", "OK")->show();
@@ -147,7 +127,7 @@ void AuthService::check() {
         return;
     }
 
-    AuthClient::getMe([&](web::WebResponse& res) {
+    AuthClient::getMe([&](AuthMeResponseDto const& authMe, web::WebResponse& res) {
         loadingToast->hide();
 
         if (!res.ok()) {
@@ -176,13 +156,6 @@ void AuthService::check() {
             return;
         }
 
-        auto jsonResult = res.json();
-        if (!jsonResult) {
-            log::warn("Failed to check login status: invalid response");
-            return;
-        }
-
-        auto authMe = gdvn::adapters::AuthMeResponseAdapter::fromJson(jsonResult.unwrap());
         if (!authMe.valid) {
             log::warn("Failed to check login status: invalid response");
             return;

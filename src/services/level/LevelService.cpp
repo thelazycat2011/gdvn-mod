@@ -1,20 +1,9 @@
 #include "LevelService.hpp"
 
-#include "../../adapters/LevelInfoResponseAdapter.hpp"
 #include "../../clients/level/LevelClient.hpp"
 
 void LevelService::getLevel(int id, GetLevelCallback callback) {
-	LevelClient::getLevel(id, [&](web::WebResponse& res) {
-		LevelInfoResponseDto level;
-
-		if (res.ok()) {
-			auto jsonResult = res.json();
-
-			if (jsonResult) {
-				level = gdvn::adapters::LevelInfoResponseAdapter::fromJson(jsonResult.unwrap());
-			}
-		}
-
+	LevelClient::getLevel(id, [&](LevelInfoResponseDto const& level, web::WebResponse& res) {
 		if (callback) {
 			callback(level, res);
 		}

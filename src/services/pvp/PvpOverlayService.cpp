@@ -2,8 +2,6 @@
 
 #include "../auth/AuthService.hpp"
 #include "PvpSubmitterService.hpp"
-#include "../../adapters/ActivePvpMatchResponseAdapter.hpp"
-#include "../../adapters/RealtimeTokenResponseAdapter.hpp"
 #include "../../clients/auth/AuthClient.hpp"
 #include "../../clients/level/LevelClient.hpp"
 #include "../../clients/pvp/PvpClient.hpp"
@@ -592,7 +590,7 @@ void PvpOverlayService::requestMatch() {
 		return;
 	}
 
-	LevelClient::getActivePvpMatch(m_levelID, [&](web::WebResponse& res) {
+	LevelClient::getActivePvpMatch(m_levelID, [&](ActivePvpMatchResponseDto const& match, web::WebResponse& res) {
 		if (m_cleanedUp) {
 			return;
 		}
@@ -602,13 +600,6 @@ void PvpOverlayService::requestMatch() {
 			return;
 		}
 
-		auto jsonResult = res.json();
-		if (!jsonResult) {
-			log::warn("Failed to parse Versus overlay match snapshot");
-			return;
-		}
-
-		auto match = gdvn::adapters::ActivePvpMatchResponseAdapter::fromJson(jsonResult.unwrap());
 		if (!match.valid) {
 			log::warn("Failed to map Versus overlay match snapshot");
 			return;
@@ -676,7 +667,7 @@ void PvpOverlayService::requestRealtimeToken() {
 
 	m_requestingRealtimeToken = true;
 
-	AuthClient::getRealtimeToken([&](web::WebResponse& res) {
+	AuthClient::getRealtimeToken([&](RealtimeTokenResponseDto const& token, web::WebResponse& res) {
 		m_requestingRealtimeToken = false;
 
 		if (m_cleanedUp) {
@@ -688,13 +679,6 @@ void PvpOverlayService::requestRealtimeToken() {
 			return;
 		}
 
-		auto jsonResult = res.json();
-		if (!jsonResult) {
-			log::warn("Failed to parse Versus realtime token");
-			return;
-		}
-
-		auto token = gdvn::adapters::RealtimeTokenResponseAdapter::fromJson(jsonResult.unwrap());
 		if (!token.valid) {
 			log::warn("Failed to map Versus realtime token");
 			return;

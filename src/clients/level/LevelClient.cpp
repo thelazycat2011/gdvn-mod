@@ -1,5 +1,7 @@
 #include "LevelClient.hpp"
 
+#include "../../adapters/ActivePvpMatchResponseAdapter.hpp"
+#include "../../adapters/LevelInfoResponseAdapter.hpp"
 #include "../../common.hpp"
 #include "../../utils/AuthConfig.hpp"
 
@@ -7,7 +9,7 @@ namespace {
 async::TaskHolder<web::WebResponse> s_getHolder;
 }
 
-void LevelClient::getLevel(int id, Callback callback) {
+void LevelClient::getLevel(int id, GetLevelCallback callback) {
 	web::WebRequest req;
 	auto token = gdvn::auth_config::getToken();
 
@@ -18,17 +20,35 @@ void LevelClient::getLevel(int id, Callback callback) {
 	auto url = API_URL + "/lists/levels/" + std::to_string(id) + "/starred";
 
 	s_getHolder.spawn(req.get(url), [&](web::WebResponse res) {
-		callback(res);
+		LevelInfoResponseDto dto;
+
+		if (res.ok()) {
+			auto jsonResult = res.json();
+			if (jsonResult) {
+				dto = gdvn::adapters::LevelInfoResponseAdapter::fromJson(jsonResult.unwrap());
+			}
+		}
+
+		callback(dto, res);
 	});
 }
 
-void LevelClient::getActivePvpMatch(int levelID, Callback callback) {
+void LevelClient::getActivePvpMatch(int levelID, GetActivePvpMatchCallback callback) {
 	web::WebRequest req;
 	std::string url = API_URL + "/levels/" + std::to_string(levelID) + "/inPvp";
 
 	req.header("Authorization", "Bearer " + gdvn::auth_config::getToken());
 
 	s_getHolder.spawn(req.get(url), [&](web::WebResponse res) {
-		callback(res);
+		ActivePvpMatchResponseDto dto;
+
+		if (res.ok()) {
+			auto jsonResult = res.json();
+			if (jsonResult) {
+				dto = gdvn::adapters::ActivePvpMatchResponseAdapter::fromJson(jsonResult.unwrap());
+			}
+		}
+
+		callback(dto, res);
 	});
 }

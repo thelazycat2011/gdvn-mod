@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include "../auth/AuthService.hpp"
-#include "../../adapters/ActivePvpMatchResponseAdapter.hpp"
 #include "../../clients/level/LevelClient.hpp"
 #include "../../clients/pvp/PvpClient.hpp"
 
@@ -20,22 +19,11 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode) : m_
 	}
 
 	std::weak_ptr<State> state = m_state;
-	LevelClient::getActivePvpMatch(levelID, [&](web::WebResponse& res) {
+	LevelClient::getActivePvpMatch(levelID, [&](ActivePvpMatchResponseDto const& match, web::WebResponse& res) {
 		if (!res.ok()) {
 			return;
 		}
 
-		auto jsonResult = res.json();
-		if (!jsonResult) {
-			if (auto locked = state.lock()) {
-				log::warn("Failed to parse active Versus match for level {}", locked->levelID);
-			} else {
-				log::warn("Failed to parse active Versus match");
-			}
-			return;
-		}
-
-		auto match = gdvn::adapters::ActivePvpMatchResponseAdapter::fromJson(jsonResult.unwrap());
 		if (match.valid) {
 			if (auto locked = state.lock()) {
 				locked->matchID = match.matchID;
