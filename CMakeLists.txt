@@ -20,7 +20,7 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 if(WIN32)
   set_source_files_properties(
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/services/pvp/PvpRealtimeSocketService.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/clients/websocket/WebsocketClient.cpp"
     PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 endif()
 

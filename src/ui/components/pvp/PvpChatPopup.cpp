@@ -1,10 +1,10 @@
 #include "PvpChatPopup.hpp"
 
 #include "../../../services/pvp/PvpOverlayService.hpp"
+#include "../../../utils/StringUtils.hpp"
 #include <Geode/binding/ButtonSprite.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <utility>
 
 namespace {
@@ -12,18 +12,7 @@ constexpr float CHAT_HISTORY_WIDTH = 320.0f;
 constexpr float CHAT_HISTORY_LINE_HEIGHT = 15.0f;
 constexpr int CHAT_HISTORY_VISIBLE_LINES = 8;
 constexpr int MAX_CHAT_MESSAGE_LENGTH = 500;
-
-std::string trimCopy(std::string value) {
-    auto begin = std::find_if_not(value.begin(), value.end(), [=](unsigned char c) { return std::isspace(c); });
-    auto end = std::find_if_not(value.rbegin(), value.rend(), [=](unsigned char c) { return std::isspace(c); }).base();
-
-    if (begin >= end) {
-        return "";
-    }
-
-    return std::string(begin, end);
-}
-}
+} // namespace
 
 PvpChatPopup* PvpChatPopup::create(PvpOverlayService* overlay) {
     auto ret = new PvpChatPopup();
@@ -197,7 +186,7 @@ void PvpChatPopup::submit() {
         return;
     }
 
-    auto content = trimCopy(static_cast<std::string>(m_input->getString()));
+    auto content = gdvn::utils::string::trimCopy(static_cast<std::string>(m_input->getString()));
     if (content.empty()) {
         this->setStatus("Message cannot be empty");
         return;

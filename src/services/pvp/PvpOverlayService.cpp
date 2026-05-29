@@ -9,15 +9,14 @@
 #include "../../ui/components/pvp/PvpChatPopup.hpp"
 #include "../../ui/components/pvp/PvpOverlay.hpp"
 #include "../../ui/components/pvp/PvpRecentChatStack.hpp"
+#include "../../utils/DateUtils.hpp"
+#include "../../utils/StringUtils.hpp"
 #include "../auth/AuthService.hpp"
 #include "PvpSubmitterService.hpp"
 
 #include <Geode/ui/Notification.hpp>
 
 #include <algorithm>
-#include <cctype>
-#include <charconv>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 
@@ -30,44 +29,6 @@ constexpr int MAX_CHAT_MESSAGE_LENGTH = 500;
 constexpr int MESSAGE_FETCH_LIMIT = 100;
 
 PvpOverlayService* s_activeOverlay = nullptr;
-
-std::string trimCopy(std::string value) {
-    auto begin = std::find_if_not(value.begin(), value.end(), [=](unsigned char c) { return std::isspace(c); });
-    auto end = std::find_if_not(value.rbegin(), value.rend(), [=](unsigned char c) { return std::isspace(c); }).base();
-
-    if (begin >= end) {
-        return "";
-    }
-
-    return std::string(begin, end);
-}
-
-std::string toTTFSafeText(std::string text) {
-    std::string safe;
-    safe.reserve(text.size());
-
-    for (unsigned char c : text) {
-        if (c == '\n' || c == '\r' || c == '\t') {
-            safe.push_back(' ');
-        } else if (c >= 32 || c >= 128) {
-            safe.push_back(static_cast<char>(c));
-        }
-    }
-
-    return safe;
-}
-
-std::string truncateLabel(std::string text, size_t maxLength) {
-    if (text.size() <= maxLength) {
-        return text;
-    }
-
-    if (maxLength <= 3) {
-        return text.substr(0, maxLength);
-    }
-
-    return text.substr(0, maxLength - 3) + "...";
-}
 
 std::string formatProgress(float value) {
     auto rounded = std::round(value);
@@ -100,63 +61,6 @@ std::string systemParticipantLabel(std::string const& uid, std::string const& cu
 
     return "Opponent";
 }
-
-std::int64_t currentEpochSeconds() {
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
-        .count();
-}
-
-std::int64_t daysFromCivil(int year, unsigned month, unsigned day) {
-    year -= month <= 2;
-    const auto era = (year >= 0 ? year : year - 399) / 400;
-    const auto yoe = static_cast<unsigned>(year - era * 400);
-    const auto doy = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
-    const auto doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + static_cast<int>(doe) - 719468;
-}
-
-bool parseFixedInt(std::string const& value, size_t offset, size_t length, int& output) {
-    if (offset + length > value.size()) {
-        return false;
-    }
-
-    auto begin = value.data() + offset;
-    auto end = begin + length;
-    auto result = std::from_chars(begin, end, output);
-    return result.ec == std::errc() && result.ptr == end;
-}
-
-std::int64_t parseIsoEpochSeconds(std::string const& value) {
-    if (value.size() < 19) {
-        return 0;
-    }
-
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-
-    if (value[4] != '-' || value[7] != '-' || value[10] != 'T' || value[13] != ':' || value[16] != ':' ||
-        !parseFixedInt(value, 0, 4, year) || !parseFixedInt(value, 5, 2, month) || !parseFixedInt(value, 8, 2, day) ||
-        !parseFixedInt(value, 11, 2, hour) || !parseFixedInt(value, 14, 2, minute) ||
-        !parseFixedInt(value, 17, 2, second) || month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 ||
-        hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60) {
-        return 0;
-    }
-
-    return daysFromCivil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) * 86400 + hour * 3600 +
-           minute * 60 + second;
-}
-
-std::string formatCountdown(std::int64_t seconds) {
-    seconds = std::max<std::int64_t>(0, seconds);
-    const auto minutes = seconds / 60;
-    const auto secs = seconds % 60;
-    return fmt::format("{}:{:02}", minutes, secs);
-}
-
 } // namespace gdvn::pvp_overlay_detail
 using namespace gdvn::pvp_overlay_detail;
 
@@ -269,7 +173,7 @@ void PvpOverlayService::parseMatchSnapshot(PvpMatchSnapshotDto const& snapshot) 
     m_matchID = snapshot.matchID;
     m_currentUid = snapshot.currentUid;
     m_mode = snapshot.mode == "platformer" ? "platformer" : "classic";
-    m_matchEndsAtEpoch = parseIsoEpochSeconds(snapshot.endsAt);
+    m_matchEndsAtEpoch = gdvn::utils::date::parseIsoEpochSeconds(snapshot.endsAt);
     m_lastCountdownSeconds = -1;
     auto status = snapshot.status;
     m_active = this->isActiveStatus(status);
@@ -374,7 +278,7 @@ void PvpOverlayService::submitChatMessage(std::string content) {
         return;
     }
 
-    content = trimCopy(std::move(content));
+    content = gdvn::utils::string::trimCopy(std::move(content));
     if (content.empty()) {
         if (m_chatPopup) {
             m_chatPopup->setSending(false);
@@ -423,24 +327,28 @@ bool PvpOverlayService::isReadyForRealtime() const {
 }
 
 void PvpOverlayService::connectRealtime() {
-    if (!this->isReadyForRealtime() || m_supabaseUrl.empty() || m_anonKey.empty() || m_socket) {
+    if (!this->isReadyForRealtime() || m_supabaseUrl.empty() || m_anonKey.empty() || m_websocketClient) {
         return;
     }
 
     m_connecting = true;
 
-    auto socket = PvpRealtimeClient::create(this);
-    if (!socket->connect(m_supabaseUrl, m_anonKey, m_matchID, m_realtimeAccessToken)) {
+    auto client = PvpWebsocketClient::create({
+        [this] { this->handleRealtimeOpen(); },
+        [this](PvpMatchRealtimeMessageDto const& message) { this->handleRealtimeMessage(message); },
+        [this] { this->handleRealtimeClose(); },
+    });
+    if (!client->connect(m_supabaseUrl, m_anonKey, m_matchID, m_realtimeAccessToken)) {
         m_connecting = false;
         this->scheduleReconnect();
         return;
     }
 
-    m_socket = socket;
+    m_websocketClient = client;
 }
 
-void PvpOverlayService::onRealtimeOpen() {
-    if (!m_socket || m_cleanedUp) {
+void PvpOverlayService::handleRealtimeOpen() {
+    if (!m_websocketClient || m_cleanedUp) {
         return;
     }
 
@@ -448,8 +356,8 @@ void PvpOverlayService::onRealtimeOpen() {
     m_reconnectAttempts = 0;
 }
 
-void PvpOverlayService::onRealtimeMessage(PvpMatchRealtimeMessageDto const& message) {
-    if (!m_socket || m_cleanedUp || !message.valid) {
+void PvpOverlayService::handleRealtimeMessage(PvpMatchRealtimeMessageDto const& message) {
+    if (!m_websocketClient || m_cleanedUp || !message.valid) {
         return;
     }
 
@@ -467,8 +375,8 @@ void PvpOverlayService::onRealtimeMessage(PvpMatchRealtimeMessageDto const& mess
     }
 }
 
-void PvpOverlayService::onRealtimeClose() {
-    m_socket.reset();
+void PvpOverlayService::handleRealtimeClose() {
+    m_websocketClient.reset();
     m_connecting = false;
 
     if (!m_cleanedUp && m_chatOpen) {
@@ -500,7 +408,7 @@ void PvpOverlayService::handleMatchRow(PvpMatchRowDto const& row) {
         m_mode = "platformer";
     }
     if (!row.endsAt.empty()) {
-        m_matchEndsAtEpoch = parseIsoEpochSeconds(row.endsAt);
+        m_matchEndsAtEpoch = gdvn::utils::date::parseIsoEpochSeconds(row.endsAt);
         m_lastCountdownSeconds = -1;
     }
     auto status = row.status;
@@ -515,7 +423,7 @@ void PvpOverlayService::handleMatchRow(PvpMatchRowDto const& row) {
     this->refreshChatVisibility();
 
     if (!m_chatOpen) {
-        this->closeSocket();
+        this->closeRealtime();
     }
 }
 
@@ -571,8 +479,9 @@ void PvpOverlayService::handleMessageRow(PvpMessageDto const& dto, bool animateN
     }
 
     if (message.id > 0) {
-        auto existing = std::find_if(m_chatMessages.begin(), m_chatMessages.end(),
-                                     [message](PvpOverlayChatMessageModel const& item) { return item.id == message.id; });
+        auto existing =
+            std::find_if(m_chatMessages.begin(), m_chatMessages.end(),
+                         [message](PvpOverlayChatMessageModel const& item) { return item.id == message.id; });
 
         if (existing == m_chatMessages.end()) {
             m_chatMessages.push_back(message);
@@ -693,7 +602,8 @@ std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto con
     return "Match update.";
 }
 
-std::string PvpOverlayService::formatPlayerLabel(std::string const& label, PvpOverlayPlayerProgressModel const& player) const {
+std::string PvpOverlayService::formatPlayerLabel(std::string const& label,
+                                                 PvpOverlayPlayerProgressModel const& player) const {
     auto modeSuffix = player.playMode == "practice" ? " (practice)" : "";
     return fmt::format("{}{}: {}", label, modeSuffix, formatProgressLabel(player.progress));
 }
@@ -718,7 +628,8 @@ std::vector<std::string> PvpOverlayService::getChatHistoryLines() const {
 
     for (auto const& message : m_chatMessages) {
         auto sender = this->getChatSenderLabel(message);
-        lines.push_back(truncateLabel(toTTFSafeText(sender + ": " + message.content), 120));
+        lines.push_back(
+            gdvn::utils::string::truncate(gdvn::utils::string::toTTFSafeText(sender + ": " + message.content), 120));
     }
 
     return lines;
@@ -742,7 +653,7 @@ void PvpOverlayService::pushRecentMessage(PvpOverlayChatMessageModel const& mess
     }
 
     auto sender = this->getChatSenderLabel(message);
-    auto text = truncateLabel(toTTFSafeText(sender + ": " + message.content), 140);
+    auto text = gdvn::utils::string::truncate(gdvn::utils::string::toTTFSafeText(sender + ": " + message.content), 140);
     if (text.empty()) {
         return;
     }
@@ -774,7 +685,8 @@ void PvpOverlayService::update(float dt) {
     this->updateRecentMessages(dt);
 
     if (m_active && m_matchEndsAtEpoch > 0) {
-        auto countdownSeconds = std::max<std::int64_t>(0, m_matchEndsAtEpoch - currentEpochSeconds());
+        auto countdownSeconds =
+            std::max<std::int64_t>(0, m_matchEndsAtEpoch - gdvn::utils::date::currentEpochSeconds());
         if (countdownSeconds != m_lastCountdownSeconds) {
             if (countdownSeconds == 0 && m_lastCountdownSeconds != 0 && m_submitter) {
                 m_submitter->flushDeathCount();
@@ -790,7 +702,7 @@ void PvpOverlayService::update(float dt) {
             if (!m_active) {
                 m_chatOpen = false;
                 this->refreshChatVisibility();
-                this->closeSocket();
+                this->closeRealtime();
             }
         }
     }
@@ -811,16 +723,16 @@ void PvpOverlayService::update(float dt) {
         }
     }
 
-    if (m_socket && m_socket->isOpen() && m_realtimeTokenExpiresAt > 0 &&
-        currentEpochSeconds() >= m_realtimeTokenExpiresAt - 60) {
+    if (m_websocketClient && m_websocketClient->isOpen() && m_realtimeTokenExpiresAt > 0 &&
+        gdvn::utils::date::currentEpochSeconds() >= m_realtimeTokenExpiresAt - 60) {
         m_realtimeTokenExpiresAt = 0;
-        this->closeSocket();
+        this->closeRealtime();
         this->requestRealtimeToken();
         return;
     }
 
-    if (m_socket) {
-        m_socket->update(dt);
+    if (m_websocketClient) {
+        m_websocketClient->update(dt);
     }
 }
 
@@ -833,15 +745,15 @@ void PvpOverlayService::scheduleReconnect() {
     m_reconnectTimer = static_cast<float>(std::min(1 << (m_reconnectAttempts - 1), 10));
 }
 
-void PvpOverlayService::closeSocket() {
-    if (!m_socket) {
+void PvpOverlayService::closeRealtime() {
+    if (!m_websocketClient) {
         return;
     }
 
-    auto socket = m_socket;
-    m_socket.reset();
+    auto client = m_websocketClient;
+    m_websocketClient.reset();
     m_connecting = false;
-    socket->close();
+    client->close();
 }
 
 void PvpOverlayService::cleanup() {
@@ -850,7 +762,7 @@ void PvpOverlayService::cleanup() {
     }
 
     m_cleanedUp = true;
-    this->closeSocket();
+    this->closeRealtime();
 
     if (s_activeOverlay == this) {
         s_activeOverlay = nullptr;
@@ -871,8 +783,11 @@ void PvpOverlayService::refreshLabel() {
     }
 
     auto countdownSeconds =
-        m_matchEndsAtEpoch > 0 ? std::max<std::int64_t>(0, m_matchEndsAtEpoch - currentEpochSeconds()) : -1;
-    auto timerLine = countdownSeconds >= 0 ? fmt::format("\nTime: {}", formatCountdown(countdownSeconds)) : "";
+        m_matchEndsAtEpoch > 0
+            ? std::max<std::int64_t>(0, m_matchEndsAtEpoch - gdvn::utils::date::currentEpochSeconds())
+            : -1;
+    auto timerLine =
+        countdownSeconds >= 0 ? fmt::format("\nTime: {}", gdvn::utils::date::formatCountdown(countdownSeconds)) : "";
     m_lastCountdownSeconds = countdownSeconds;
 
     m_overlay->setText(fmt::format("Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "../../clients/pvp/PvpRealtimeClient.hpp"
+#include "../../clients/pvp/PvpWebsocketClient.hpp"
+#include "../../dtos/pvp/PvpMessageDto.hpp"
+#include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchPlayerProgressDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRealtimeMessageDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRowDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchSnapshotDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchSystemMetadataDto.hpp"
-#include "../../dtos/pvp/PvpMessageDto.hpp"
-#include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
 #include "../../models/pvp/overlay/PvpOverlayChatMessageModel.hpp"
 #include "../../models/pvp/overlay/PvpOverlayPlayerProgressModel.hpp"
 #include <Geode/Geode.hpp>
@@ -25,10 +25,10 @@ class PvpChatPopup;
 class PvpOverlay;
 class PvpRecentChatStack;
 
-class PvpOverlayService final : public PvpRealtimeClientDelegate {
+class PvpOverlayService final {
   public:
     explicit PvpOverlayService(PlayLayer* layer, int levelID, PvpSubmitterService* submitter = nullptr);
-    ~PvpOverlayService() override;
+    ~PvpOverlayService();
 
     static PvpOverlayService* getActive();
 
@@ -44,17 +44,13 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
     std::string getChatHistoryText() const;
     std::vector<std::string> getChatHistoryLines() const;
 
-    void onRealtimeOpen() override;
-    void onRealtimeMessage(PvpMatchRealtimeMessageDto const& message) override;
-    void onRealtimeClose() override;
-
   private:
     PlayLayer* m_layer = nullptr;
     std::unique_ptr<PvpOverlay> m_overlay;
     std::unique_ptr<PvpRecentChatStack> m_recentChatStack;
     PvpChatPopup* m_chatPopup = nullptr;
     PvpSubmitterService* m_submitter = nullptr;
-    std::shared_ptr<PvpRealtimeClient> m_socket;
+    std::shared_ptr<PvpWebsocketClient> m_websocketClient;
 
     int m_levelID = 0;
     int m_matchID = 0;
@@ -87,8 +83,11 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
     void requestRealtimeToken();
     void requestMessages(bool animateNew, bool incremental);
     void connectRealtime();
-    void closeSocket();
+    void closeRealtime();
     void scheduleReconnect();
+    void handleRealtimeOpen();
+    void handleRealtimeMessage(PvpMatchRealtimeMessageDto const& message);
+    void handleRealtimeClose();
     void scheduleMessageRefresh();
     void handleResultRow(PvpMatchPlayerProgressDto const& row);
     void handleMatchRow(PvpMatchRowDto const& row);

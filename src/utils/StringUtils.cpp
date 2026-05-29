@@ -1,5 +1,7 @@
 #include "StringUtils.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <vector>
 
 namespace gdvn::utils::string {
@@ -66,6 +68,51 @@ std::string toAsciiCompatible(std::string text) {
     }
 
     return ascii;
+}
+
+std::string trimCopy(std::string value) {
+    auto begin = std::find_if_not(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c); });
+    auto end = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char c) { return std::isspace(c); }).base();
+
+    if (begin >= end) {
+        return "";
+    }
+
+    return std::string(begin, end);
+}
+
+std::string trimTrailingSlash(std::string value) {
+    while (!value.empty() && value.back() == '/') {
+        value.pop_back();
+    }
+    return value;
+}
+
+std::string toTTFSafeText(std::string text) {
+    std::string safe;
+    safe.reserve(text.size());
+
+    for (unsigned char c : text) {
+        if (c == '\n' || c == '\r' || c == '\t') {
+            safe.push_back(' ');
+        } else if (c >= 32 || c >= 128) {
+            safe.push_back(static_cast<char>(c));
+        }
+    }
+
+    return safe;
+}
+
+std::string truncate(std::string text, size_t maxLength) {
+    if (text.size() <= maxLength) {
+        return text;
+    }
+
+    if (maxLength <= 3) {
+        return text.substr(0, maxLength);
+    }
+
+    return text.substr(0, maxLength - 3) + "...";
 }
 
 } // namespace gdvn::utils::string
