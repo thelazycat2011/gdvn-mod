@@ -1,6 +1,6 @@
 #pragma once
 
-class OpenHackCheatGuardService {
+class EclipseAntiCheatService {
   public:
     static bool isCheated();
 };

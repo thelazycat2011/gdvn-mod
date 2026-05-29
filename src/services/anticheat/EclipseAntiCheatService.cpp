@@ -1,6 +1,6 @@
-#include "EclipseCheatGuardService.hpp"
+#include "EclipseAntiCheatService.hpp"
 
-#include "CheatGuardConfig.hpp"
+#include "AntiCheatConfig.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Event.hpp>
 
@@ -97,7 +97,7 @@ VTable const& getVTable() {
 }
 } // namespace eclipse::__internal__
 
-bool EclipseCheatGuardService::isCheated() {
+bool EclipseAntiCheatService::isCheated() {
     if (!geode::Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
         return false;
     }
@@ -108,7 +108,7 @@ bool EclipseCheatGuardService::isCheated() {
         return true;
     }
 
-    if constexpr (gdvn::cheat_guard::ENABLE_CONFIG_BASED_CHEAT_CHECKS) {
+    if constexpr (gdvn::anti_cheat::ENABLE_CONFIG_BASED_CHEAT_CHECKS) {
         if (vtable.CheckCheatsEnabled && vtable.CheckCheatsEnabled()) {
             return true;
         }

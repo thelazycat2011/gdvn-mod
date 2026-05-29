@@ -1,4 +1,4 @@
-#include "QolModCheatGuardService.hpp"
+#include "QolModAntiCheatService.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -13,7 +13,7 @@ bool isModuleEnabled(geode::Mod* mod, std::string const& id, bool defaultValue =
 
 } // namespace
 
-bool QolModCheatGuardService::isCheated() {
+bool QolModAntiCheatService::isCheated() {
     auto mod = geode::Loader::get()->getLoadedMod("thesillydoggo.qolmod");
 
     if (!mod) {

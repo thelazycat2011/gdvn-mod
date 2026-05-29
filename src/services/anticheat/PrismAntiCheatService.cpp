@@ -1,4 +1,4 @@
-#include "PrismCheatGuardService.hpp"
+#include "PrismAntiCheatService.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -46,7 +46,7 @@ float getSavedFloat(std::vector<matjson::Value> const& values, std::string_view 
 
 } // namespace
 
-bool PrismCheatGuardService::isCheated() {
+bool PrismAntiCheatService::isCheated() {
     auto mod = geode::Loader::get()->getLoadedMod("firee.prism");
     if (!mod) {
         return false;

@@ -1,4 +1,4 @@
-#include "OpenHackCheatGuardService.hpp"
+#include "OpenHackAntiCheatService.hpp"
 
 #include <Geode/Geode.hpp>
 
@@ -6,7 +6,7 @@
 #include <Geode/platform/windows.hpp>
 #endif
 
-bool OpenHackCheatGuardService::isCheated() {
+bool OpenHackAntiCheatService::isCheated() {
     if (!geode::Loader::get()->getLoadedMod("prevter.openhack")) {
         return false;
     }

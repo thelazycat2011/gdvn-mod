@@ -1,6 +1,6 @@
 #pragma once
 
-class QolModCheatGuardService {
+class PrismAntiCheatService {
   public:
     static bool isCheated();
 };

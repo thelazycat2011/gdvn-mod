@@ -1,5 +1,5 @@
 #include "../services/auth/AuthService.hpp"
-#include "../services/cheat/CheatGuardService.hpp"
+#include "../services/anticheat/AntiCheatService.hpp"
 #include "../services/event/EventSubmitterService.hpp"
 #include "../services/event/RaidSubmitterService.hpp"
 #include "../services/progress/AttemptCounterService.hpp"
@@ -65,18 +65,18 @@ class $modify(DTPlayLayer, PlayLayer) {
         log::warn("Run marked as cheated on level {}: {}", m_level->m_levelID.value(), reason);
     }
 
-    void refreshCheatGuardReason() {
+    void refreshAntiCheatReason() {
         if (m_fields->isCheatedRun) {
             return;
         }
 
-        if (auto reason = CheatGuardService::getGameplayCheatReason()) {
+        if (auto reason = AntiCheatService::getGameplayCheatReason()) {
             markRunCheated(std::string(*reason));
         }
     }
 
     bool isRunCheated() {
-        refreshCheatGuardReason();
+        refreshAntiCheatReason();
 
         if (!m_fields->isCheatedRun && isDamageBypassActive()) {
             markRunCheated("damage bypass");
@@ -104,7 +104,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->raidSubmitter = std::make_unique<RaidSubmitterService>(id);
         m_fields->lastPracticeMode = m_isPracticeMode;
         m_fields->pvpSubmitter = std::make_unique<PvpSubmitterService>(id, m_isPracticeMode ? "practice" : "normal");
-        refreshCheatGuardReason();
+        refreshAntiCheatReason();
 
         if (AuthService::isLoggedIn() && !m_isPracticeMode) {
             m_fields->pvpOverlay = std::make_unique<PvpOverlayService>(this, id, m_fields->pvpSubmitter.get());
@@ -215,7 +215,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->hasRespawned = true;
         m_fields->isCheatedRun = false;
         m_fields->cheatReason.clear();
-        refreshCheatGuardReason();
+        refreshAntiCheatReason();
     }
 
     void onQuit() {
