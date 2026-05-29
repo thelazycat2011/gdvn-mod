@@ -21,7 +21,10 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 if (WIN32)
-    set_source_files_properties(src/services/PvpRealtimeSocketService.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/services/pvp/PvpRealtimeSocketService.cpp"
+        PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+    )
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
