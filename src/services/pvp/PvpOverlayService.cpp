@@ -6,35 +6,26 @@
 #include "../../clients/level/LevelClient.hpp"
 #include "../../clients/pvp/PvpClient.hpp"
 #include "../../config.hpp"
+#include "../../ui/components/pvp/PvpChatPopup.hpp"
+#include "../../ui/components/pvp/PvpOverlay.hpp"
+#include "../../ui/components/pvp/PvpRecentChatStack.hpp"
 #include "../auth/AuthService.hpp"
 #include "PvpSubmitterService.hpp"
 
-#include <Geode/binding/ButtonSprite.hpp>
 #include <Geode/ui/Notification.hpp>
-#include <Geode/ui/Popup.hpp>
-#include <Geode/ui/TextInput.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <chrono>
-#include <cstddef>
 #include <cmath>
 #include <cstdint>
 
 using namespace geode::prelude;
 
 namespace gdvn::pvp_overlay_detail {
-constexpr float LABEL_MARGIN = 8.0f;
-constexpr float CHAT_MARGIN = 8.0f;
-constexpr float CHAT_MESSAGE_LIFETIME = 8.0f;
-constexpr float CHAT_FADE_TIME = 1.5f;
 constexpr float CHAT_GRACE_SECONDS = 3.0f * 60.0f;
 constexpr float MESSAGE_REFRESH_COALESCE = 0.2f;
-constexpr float CHAT_HISTORY_WIDTH = 320.0f;
-constexpr float CHAT_HISTORY_LINE_HEIGHT = 15.0f;
-constexpr int MAX_RECENT_MESSAGES = 4;
-constexpr int CHAT_HISTORY_VISIBLE_LINES = 8;
 constexpr int MAX_CHAT_MESSAGE_LENGTH = 500;
 constexpr int MESSAGE_FETCH_LIMIT = 100;
 
@@ -49,21 +40,6 @@ std::string trimCopy(std::string value) {
     }
 
     return std::string(begin, end);
-}
-
-std::string toLabelSafeText(std::string text) {
-    std::string safe;
-    safe.reserve(text.size());
-
-    for (unsigned char c : text) {
-        if (c == '\n' || c == '\r' || c == '\t') {
-            safe.push_back(' ');
-        } else if (c >= 32 && c < 127) {
-            safe.push_back(static_cast<char>(c));
-        }
-    }
-
-    return safe;
 }
 
 std::string toTTFSafeText(std::string text) {
@@ -184,210 +160,12 @@ std::string formatCountdown(std::int64_t seconds) {
 } // namespace gdvn::pvp_overlay_detail
 using namespace gdvn::pvp_overlay_detail;
 
-class PvpChatPopupService final : public Popup, public TextInputDelegate {
-  public:
-    static PvpChatPopupService* create(PvpOverlayService* overlay) {
-        auto ret = new PvpChatPopupService();
-        if (ret->init(overlay)) {
-            ret->autorelease();
-            return ret;
-        }
-
-        delete ret;
-        return nullptr;
-    }
-
-    void focusInput() {
-        if (m_input) {
-            m_input->focus();
-        }
-    }
-
-    void setSending(bool sending) {
-        m_sending = sending;
-        if (m_sendButton) {
-            m_sendButton->setEnabled(!sending);
-        }
-    }
-
-    void setStatus(std::string const& status) {
-        if (m_statusLabel) {
-            m_statusLabel->setString(status.c_str());
-        }
-    }
-
-    void updateHistory() {
-        if (!m_overlay) {
-            return;
-        }
-
-        auto lines = m_overlay->getChatHistoryLines();
-        if (lines.empty()) {
-            lines.push_back("No messages yet.");
-        }
-
-        auto maxOffset = lines.size() > CHAT_HISTORY_VISIBLE_LINES ? lines.size() - CHAT_HISTORY_VISIBLE_LINES : 0;
-        m_historyOffset = std::min(m_historyOffset, maxOffset);
-        auto start = maxOffset - m_historyOffset;
-        auto end = std::min(lines.size(), start + CHAT_HISTORY_VISIBLE_LINES);
-
-        for (auto* label : m_historyLabels) {
-            if (label) {
-                label->removeFromParentAndCleanup(true);
-            }
-        }
-        m_historyLabels.clear();
-
-        for (size_t i = start; i < end; ++i) {
-            auto label = CCLabelBMFont::create(lines[i].c_str(), "chatFont.fnt");
-            label->setAnchorPoint({0.0f, 1.0f});
-            label->setScale(0.52f);
-            label->setOpacity(220);
-            label->setColor(ccc3(235, 235, 235));
-            label->limitLabelWidth(CHAT_HISTORY_WIDTH, 0.52f, 0.28f);
-            m_mainLayer->addChildAtPosition(label, Anchor::TopLeft,
-                                            {24.0f, -38.0f - CHAT_HISTORY_LINE_HEIGHT * static_cast<float>(i - start)});
-            m_historyLabels.push_back(label);
-        }
-
-        if (m_upButton) {
-            m_upButton->setEnabled(m_historyOffset < maxOffset);
-        }
-        if (m_downButton) {
-            m_downButton->setEnabled(m_historyOffset > 0);
-        }
-    }
-
-    void didSend() {
-        m_sending = false;
-        this->setSending(false);
-        this->setStatus("");
-
-        if (m_input) {
-            m_input->setString("", false);
-            m_input->focus();
-        }
-
-        this->updateHistory();
-    }
-
-    void closeFromOverlay() {
-        m_overlay = nullptr;
-        this->onClose(nullptr);
-    }
-
-    void scrollHistory(int delta) {
-        auto lineCount = m_overlay ? m_overlay->getChatHistoryLines().size() : 0;
-        auto maxOffset = lineCount > CHAT_HISTORY_VISIBLE_LINES ? lineCount - CHAT_HISTORY_VISIBLE_LINES : 0;
-        auto next = static_cast<int>(m_historyOffset) + delta;
-        m_historyOffset = static_cast<size_t>(std::clamp(next, 0, static_cast<int>(maxOffset)));
-        this->updateHistory();
-    }
-
-  protected:
-    bool init(PvpOverlayService* overlay) {
-        if (!Popup::init(380.0f, 220.0f)) {
-            return false;
-        }
-
-        m_overlay = overlay;
-        this->setTitle("Versus Chat");
-
-        auto upSprite = ButtonSprite::create("Up", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-        upSprite->setScale(0.4f);
-        m_upButton = CCMenuItemExt::createSpriteExtra(upSprite, [this](auto*) { this->scrollHistory(1); });
-        m_buttonMenu->addChildAtPosition(m_upButton, Anchor::TopRight, {-28.0f, -48.0f});
-
-        auto downSprite = ButtonSprite::create("Down", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-        downSprite->setScale(0.4f);
-        m_downButton = CCMenuItemExt::createSpriteExtra(downSprite, [this](auto*) { this->scrollHistory(-1); });
-        m_buttonMenu->addChildAtPosition(m_downButton, Anchor::TopRight, {-28.0f, -86.0f});
-
-        m_input = TextInput::create(250.0f, "Type a message...", "chatFont.fnt");
-        m_input->setCommonFilter(CommonFilter::Any);
-        m_input->setMaxCharCount(MAX_CHAT_MESSAGE_LENGTH);
-        m_input->setTextAlign(TextInputAlign::Left);
-        m_input->setDelegate(this);
-        m_mainLayer->addChildAtPosition(m_input, Anchor::Bottom, {-38.0f, 38.0f});
-
-        auto sendSprite = ButtonSprite::create("Send", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-        sendSprite->setScale(0.55f);
-        m_sendButton = CCMenuItemExt::createSpriteExtra(sendSprite, [this](auto*) { this->submit(); });
-        m_buttonMenu->addChildAtPosition(m_sendButton, Anchor::Bottom, {128.0f, 38.0f});
-
-        m_statusLabel = CCLabelBMFont::create("", "bigFont.fnt");
-        m_statusLabel->setScale(0.32f);
-        m_statusLabel->setOpacity(180);
-        m_mainLayer->addChildAtPosition(m_statusLabel, Anchor::Bottom, {0.0f, 16.0f});
-
-        this->updateHistory();
-
-        return true;
-    }
-
-    void onClose(CCObject* sender) override {
-        for (auto*& label : m_historyLabels) {
-            if (label) {
-                label->removeFromParentAndCleanup(true);
-                label = nullptr;
-            }
-        }
-        m_historyLabels.clear();
-
-        if (m_overlay) {
-            auto overlay = m_overlay;
-            m_overlay = nullptr;
-            overlay->notifyChatPopupClosed(this);
-        }
-
-        Popup::onClose(sender);
-    }
-
-    void textChanged(CCTextInputNode*) override {
-    }
-
-    void textInputReturn(CCTextInputNode*) override {
-        this->submit();
-    }
-
-    void enterPressed(CCTextInputNode*) override {
-        this->submit();
-    }
-
-  private:
-    PvpOverlayService* m_overlay = nullptr;
-    TextInput* m_input = nullptr;
-    std::vector<CCLabelBMFont*> m_historyLabels;
-    CCLabelBMFont* m_statusLabel = nullptr;
-    CCMenuItemSpriteExtra* m_sendButton = nullptr;
-    CCMenuItemSpriteExtra* m_upButton = nullptr;
-    CCMenuItemSpriteExtra* m_downButton = nullptr;
-    size_t m_historyOffset = 0;
-    bool m_sending = false;
-
-    void submit() {
-        if (!m_overlay || !m_input || m_sending) {
-            return;
-        }
-
-        auto content = trimCopy(static_cast<std::string>(m_input->getString()));
-        if (content.empty()) {
-            this->setStatus("Message cannot be empty");
-            return;
-        }
-
-        this->setSending(true);
-        this->setStatus("Sending...");
-        m_overlay->submitChatMessage(std::move(content));
-    }
-};
-
 PvpOverlayService::PvpOverlayService(PlayLayer* layer, int levelID, PvpSubmitterService* submitter)
     : m_layer(layer), m_submitter(submitter), m_levelID(levelID) {
     s_activeOverlay = this;
     m_chatMuted = Mod::get()->getSavedValue<bool>("pvp-chat-muted", false);
-    this->createLabel();
-    this->createChatNodes();
+    m_overlay = std::make_unique<PvpOverlay>(m_layer);
+    m_recentChatStack = std::make_unique<PvpRecentChatStack>(m_layer);
     this->requestMatch();
 }
 
@@ -423,7 +201,7 @@ bool PvpOverlayService::openChat() {
         return true;
     }
 
-    m_chatPopup = PvpChatPopupService::create(this);
+    m_chatPopup = PvpChatPopup::create(this);
     if (!m_chatPopup) {
         return false;
     }
@@ -444,55 +222,18 @@ void PvpOverlayService::setChatMuted(bool muted) {
     Mod::get()->setSavedValue<bool>("pvp-chat-muted", muted);
 
     if (muted) {
-        for (auto*& label : m_recentMessageLabels) {
-            if (label) {
-                label->removeFromParentAndCleanup(true);
-                label = nullptr;
-            }
+        if (m_recentChatStack) {
+            m_recentChatStack->clear();
         }
-        m_recentMessageLabels.clear();
-        m_recentMessages.clear();
     }
 
     this->refreshChatVisibility();
 }
 
-void PvpOverlayService::notifyChatPopupClosed(PvpChatPopupService* popup) {
+void PvpOverlayService::notifyChatPopupClosed(PvpChatPopup* popup) {
     if (m_chatPopup == popup) {
         m_chatPopup = nullptr;
     }
-}
-
-void PvpOverlayService::createLabel() {
-    if (!m_layer) {
-        return;
-    }
-
-    m_label = CCLabelBMFont::create("Versus\nYou: 0.00%\nOpponent: 0.00%", "bigFont.fnt");
-    m_label->setScale(0.32f);
-    m_label->setOpacity(180);
-    m_label->setVisible(false);
-    m_label->setID("gdvn-pvp-overlay"_spr);
-
-    auto parent = m_layer->m_uiLayer ? static_cast<CCNode*>(m_layer->m_uiLayer) : static_cast<CCNode*>(m_layer);
-    parent->addChild(m_label, 1000);
-    this->updateLabelPosition();
-}
-
-void PvpOverlayService::createChatNodes() {
-    if (!m_layer) {
-        return;
-    }
-
-    auto parent = m_layer->m_uiLayer ? static_cast<CCNode*>(m_layer->m_uiLayer) : static_cast<CCNode*>(m_layer);
-
-    m_chatStack = CCNode::create();
-    m_chatStack->setID("gdvn-pvp-chat-stack"_spr);
-    m_chatStack->setVisible(false);
-    parent->addChild(m_chatStack, 1001);
-
-    this->updateChatPositions();
-    this->refreshChatVisibility();
 }
 
 void PvpOverlayService::requestMatch() {
@@ -996,7 +737,7 @@ std::string PvpOverlayService::getChatSenderLabel(PvpOverlayChatMessageModel con
 }
 
 void PvpOverlayService::pushRecentMessage(PvpOverlayChatMessageModel const& message) {
-    if (!m_chatStack || m_chatMuted) {
+    if (!m_recentChatStack || m_chatMuted) {
         return;
     }
 
@@ -1006,81 +747,16 @@ void PvpOverlayService::pushRecentMessage(PvpOverlayChatMessageModel const& mess
         return;
     }
 
-    auto label = CCLabelBMFont::create(text.c_str(), "chatFont.fnt");
-    label->setAnchorPoint({0.0f, 0.0f});
-    label->setScale(0.55f);
-    label->setOpacity(220);
-
-    if (message.type == "system") {
-        label->setColor(ccc3(255, 225, 120));
-    } else if (!m_currentUid.empty() && message.senderUid == m_currentUid) {
-        label->setColor(ccc3(150, 255, 150));
-    }
-
-    label->limitLabelWidth(280.0f, 0.55f, 0.3f);
-    m_chatStack->addChild(label);
-
-    m_recentMessages.push_back({message.id, CHAT_MESSAGE_LIFETIME});
-    m_recentMessageLabels.push_back(label);
-
-    while (m_recentMessages.size() > MAX_RECENT_MESSAGES) {
-        if (!m_recentMessageLabels.empty()) {
-            auto* oldLabel = m_recentMessageLabels.front();
-            m_recentMessageLabels.erase(m_recentMessageLabels.begin());
-            if (oldLabel) {
-                oldLabel->removeFromParentAndCleanup(true);
-            }
-        }
-        m_recentMessages.erase(m_recentMessages.begin());
-    }
-
-    this->layoutRecentMessages();
+    m_recentChatStack->pushMessage(message.id, text, message.type,
+                                   !m_currentUid.empty() && message.senderUid == m_currentUid);
     this->refreshChatVisibility();
 }
 
-void PvpOverlayService::layoutRecentMessages() {
-    for (size_t i = 0; i < m_recentMessages.size(); ++i) {
-        if (i < m_recentMessageLabels.size()) {
-            auto* label = m_recentMessageLabels[i];
-            auto reverseIndex = m_recentMessages.size() - i - 1;
-            if (label) {
-                label->setPosition({0.0f, static_cast<float>(reverseIndex) * 12.0f});
-            }
-        }
-    }
-}
-
 void PvpOverlayService::updateRecentMessages(float dt) {
-    if (m_recentMessages.empty()) {
-        return;
+    if (m_recentChatStack) {
+        m_recentChatStack->update(dt);
     }
 
-    for (size_t i = 0; i < m_recentMessages.size(); ++i) {
-        auto& message = m_recentMessages[i];
-        message.timeLeft -= dt;
-        if (i < m_recentMessageLabels.size() && m_recentMessageLabels[i]) {
-            auto opacity = message.timeLeft < CHAT_FADE_TIME
-                               ? static_cast<unsigned char>(std::max(0.0f, message.timeLeft / CHAT_FADE_TIME) * 220.0f)
-                               : static_cast<unsigned char>(220);
-            m_recentMessageLabels[i]->setOpacity(opacity);
-        }
-    }
-
-    for (size_t i = 0; i < m_recentMessages.size();) {
-        if (m_recentMessages[i].timeLeft <= 0.0f) {
-            if (i < m_recentMessageLabels.size()) {
-                if (auto* label = m_recentMessageLabels[i]) {
-                    label->removeFromParentAndCleanup(true);
-                }
-                m_recentMessageLabels.erase(m_recentMessageLabels.begin() + static_cast<std::ptrdiff_t>(i));
-            }
-            m_recentMessages.erase(m_recentMessages.begin() + static_cast<std::ptrdiff_t>(i));
-        } else {
-            ++i;
-        }
-    }
-
-    this->layoutRecentMessages();
     this->refreshChatVisibility();
 }
 
@@ -1089,8 +765,12 @@ void PvpOverlayService::update(float dt) {
         return;
     }
 
-    this->updateLabelPosition();
-    this->updateChatPositions();
+    if (m_overlay) {
+        m_overlay->updatePosition();
+    }
+    if (m_recentChatStack) {
+        m_recentChatStack->updatePosition();
+    }
     this->updateRecentMessages(dt);
 
     if (m_active && m_matchEndsAtEpoch > 0) {
@@ -1181,21 +861,12 @@ void PvpOverlayService::cleanup() {
         m_chatPopup = nullptr;
     }
 
-    if (m_label) {
-        m_label->removeFromParentAndCleanup(true);
-        m_label = nullptr;
-    }
-
-    if (m_chatStack) {
-        m_chatStack->removeFromParentAndCleanup(true);
-        m_chatStack = nullptr;
-    }
-    m_recentMessageLabels.clear();
-    m_recentMessages.clear();
+    m_recentChatStack.reset();
+    m_overlay.reset();
 }
 
 void PvpOverlayService::refreshLabel() {
-    if (!m_label) {
+    if (!m_overlay) {
         return;
     }
 
@@ -1204,11 +875,9 @@ void PvpOverlayService::refreshLabel() {
     auto timerLine = countdownSeconds >= 0 ? fmt::format("\nTime: {}", formatCountdown(countdownSeconds)) : "";
     m_lastCountdownSeconds = countdownSeconds;
 
-    m_label->setString(fmt::format("Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),
-                                   formatPlayerLabel("Opponent", m_opponent))
-                           .c_str());
+    m_overlay->setText(fmt::format("Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),
+                                   formatPlayerLabel("Opponent", m_opponent)));
     this->setOverlayVisible(m_active);
-    this->updateLabelPosition();
 }
 
 void PvpOverlayService::refreshChatVisibility() {
@@ -1219,30 +888,14 @@ void PvpOverlayService::refreshChatVisibility() {
         m_chatPopup = nullptr;
     }
 
-    if (m_chatStack) {
-        m_chatStack->setVisible(visible && !m_chatMuted && !m_recentMessages.empty());
-    }
-}
-
-void PvpOverlayService::updateLabelPosition() {
-    if (!m_label) {
-        return;
-    }
-
-    auto size = CCDirector::sharedDirector()->getWinSize();
-    m_label->setAnchorPoint({0.0f, 1.0f});
-    m_label->setPosition({LABEL_MARGIN, size.height - LABEL_MARGIN});
-}
-
-void PvpOverlayService::updateChatPositions() {
-    if (m_chatStack) {
-        m_chatStack->setPosition({CHAT_MARGIN, CHAT_MARGIN});
+    if (m_recentChatStack) {
+        m_recentChatStack->setVisible(visible && !m_chatMuted && m_recentChatStack->hasMessages());
     }
 }
 
 void PvpOverlayService::setOverlayVisible(bool visible) {
-    if (m_label) {
-        m_label->setVisible(visible && Mod::get()->getSettingValue<bool>("show-pvp-overlay"));
+    if (m_overlay) {
+        m_overlay->setVisible(visible);
     }
 }
 

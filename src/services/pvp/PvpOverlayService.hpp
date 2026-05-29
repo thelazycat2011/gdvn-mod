@@ -10,19 +10,20 @@
 #include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
 #include "../../models/pvp/overlay/PvpOverlayChatMessageModel.hpp"
 #include "../../models/pvp/overlay/PvpOverlayPlayerProgressModel.hpp"
-#include "../../models/pvp/overlay/PvpOverlayRecentChatMessageModel.hpp"
 #include <Geode/Geode.hpp>
-#include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 using namespace geode::prelude;
 
-class PvpChatPopupService;
 class PvpSubmitterService;
+class PvpChatPopup;
+class PvpOverlay;
+class PvpRecentChatStack;
 
 class PvpOverlayService final : public PvpRealtimeClientDelegate {
   public:
@@ -39,7 +40,7 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
     bool isChatMuted() const;
     void setChatMuted(bool muted);
     void submitChatMessage(std::string content);
-    void notifyChatPopupClosed(PvpChatPopupService* popup);
+    void notifyChatPopupClosed(PvpChatPopup* popup);
     std::string getChatHistoryText() const;
     std::vector<std::string> getChatHistoryLines() const;
 
@@ -49,9 +50,9 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
 
   private:
     PlayLayer* m_layer = nullptr;
-    CCLabelBMFont* m_label = nullptr;
-    CCNode* m_chatStack = nullptr;
-    PvpChatPopupService* m_chatPopup = nullptr;
+    std::unique_ptr<PvpOverlay> m_overlay;
+    std::unique_ptr<PvpRecentChatStack> m_recentChatStack;
+    PvpChatPopup* m_chatPopup = nullptr;
     PvpSubmitterService* m_submitter = nullptr;
     std::shared_ptr<PvpRealtimeClient> m_socket;
 
@@ -81,11 +82,7 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
     PvpOverlayPlayerProgressModel m_self;
     PvpOverlayPlayerProgressModel m_opponent;
     std::vector<PvpOverlayChatMessageModel> m_chatMessages;
-    std::vector<PvpOverlayRecentChatMessageModel> m_recentMessages;
-    std::vector<CCLabelBMFont*> m_recentMessageLabels;
 
-    void createLabel();
-    void createChatNodes();
     void requestMatch();
     void requestRealtimeToken();
     void requestMessages(bool animateNew, bool incremental);
@@ -103,12 +100,9 @@ class PvpOverlayService final : public PvpRealtimeClientDelegate {
     std::string formatPlayerLabel(std::string const& label, PvpOverlayPlayerProgressModel const& player) const;
     std::string getChatSenderLabel(PvpOverlayChatMessageModel const& message) const;
     void pushRecentMessage(PvpOverlayChatMessageModel const& message);
-    void layoutRecentMessages();
     void updateRecentMessages(float dt);
     void refreshLabel();
     void refreshChatVisibility();
-    void updateLabelPosition();
-    void updateChatPositions();
     void setOverlayVisible(bool visible);
     bool isReadyForRealtime() const;
     bool isActiveStatus(std::string const& status) const;

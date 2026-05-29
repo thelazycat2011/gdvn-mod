@@ -1,9 +1,9 @@
 #include <Geode/Geode.hpp>
-#include <Geode/binding/ButtonSprite.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/PauseLayer.hpp> // DO NOT REMOVE
 
 #include "../services/pvp/PvpOverlayService.hpp"
+#include "../ui/components/pvp/PvpChatButton.hpp"
 
 using namespace geode::prelude;
 
@@ -33,15 +33,7 @@ class $modify(GDVNPauseLayer, PauseLayer) {
             return;
         }
 
-        auto chatSprite = ButtonSprite::create("Chat", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-        chatSprite->setScale(0.55f);
-        auto chatButton = CCMenuItemExt::createSpriteExtra(chatSprite, [=](auto*) {
-            if (auto overlay = PvpOverlayService::getActive()) {
-                overlay->openChat();
-            }
-        });
-        chatButton->setID("gdvn-pvp-chat-button"_spr);
-        menu->addChild(chatButton);
+        menu->addChild(PvpChatButton::create());
 
         this->createToggleButton("Mute Chat", menu_selector(GDVNPauseLayer::onGDVNMuteChat), overlay->isChatMuted(),
                                  menu, {0.0f, 0.0f});
