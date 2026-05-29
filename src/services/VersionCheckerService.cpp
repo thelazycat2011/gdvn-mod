@@ -6,6 +6,7 @@
 #include <Geode/utils/web.hpp>
 #include <Geode/utils/file.hpp>
 #include <Geode/ui/Popup.hpp>
+#include "../models/GithubModels.hpp"
 
 async::TaskHolder<web::WebResponse> VersionCheckerService::m_holder;
 
@@ -129,12 +130,12 @@ void VersionCheckerService::checkForUpdate(bool notifyIfCurrent) {
 			return;
 		}
 
-		auto resJson = resJsonResult.unwrap();
-		if (!resJson["tag_name"].isString()) {
+		auto release = gdvn::models::GithubReleaseResponseModel::fromJson(resJsonResult.unwrap());
+		if (!release.valid) {
 			return;
 		}
 
-		std::string latestVersion = resJson["tag_name"].asString().unwrapOrDefault();
+		std::string latestVersion = release.tagName;
 		std::string localVersion = Mod::get()->getVersion().toNonVString();
 
 		if (latestVersion == localVersion) {

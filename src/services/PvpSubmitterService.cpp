@@ -6,6 +6,7 @@
 
 #include "AuthService.hpp"
 #include "../common.hpp"
+#include "../models/PvpModels.hpp"
 
 async::TaskHolder<web::WebResponse> PvpSubmitterService::m_get_holder, PvpSubmitterService::m_put_holder, PvpSubmitterService::m_death_holder, PvpSubmitterService::m_mode_holder;
 
@@ -41,13 +42,11 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode) : m_
 			return;
 		}
 
-		auto json = jsonResult.unwrap();
-		if (json["matchId"].isNumber()) {
+		auto match = gdvn::models::ActivePvpMatchResponseModel::fromJson(jsonResult.unwrap());
+		if (match.valid) {
 			if (auto locked = state.lock()) {
-				locked->matchID = static_cast<int>(json["matchId"].asDouble().unwrapOr(0.0));
-				if (json["mode"].isString()) {
-					locked->platformer = json["mode"].asString().unwrapOrDefault() == "platformer";
-				}
+				locked->matchID = match.matchID;
+				locked->platformer = match.mode == "platformer";
 				locked->inPvp.store(locked->matchID > 0);
 				if (locked->inPvp.load()) {
 					PvpSubmitterService::submitPlayMode(locked, locked->playMode);

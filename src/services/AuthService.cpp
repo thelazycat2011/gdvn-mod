@@ -1,5 +1,6 @@
 #include "AuthService.hpp"
 #include "../common.hpp"
+#include "../models/AuthModels.hpp"
 #include <Geode/ui/Notification.hpp>
 
 async::TaskHolder<web::WebResponse> AuthService::m_post_holder, AuthService::m_get_holder;
@@ -73,16 +74,14 @@ void AuthService::requestOTP() {
 			return;
 		}
 
-		auto json = jsonResult.unwrap();
-		if (!json["code"].isString()) {
+		auto otp = gdvn::models::OtpResponseModel::fromJson(jsonResult.unwrap());
+		if (!otp.valid) {
 			log::warn("Failed to create OTP code: invalid response");
 			FLAlertLayer::create("Error", "Failed to create login code. Please try again.", "OK")->show();
 			return;
 		}
 
-		auto code = json["code"].asString().unwrapOrDefault();
-
-		geode::Loader::get()->queueInMainThread([code] {
+		geode::Loader::get()->queueInMainThread([code = otp.code] {
 			showOTPDialog(code);
 		});
 	});
@@ -106,27 +105,23 @@ void AuthService::checkOTP(std::string code) {
 			return;
 		}
 
-		auto json = jsonResult.unwrap();
-		bool granted = json["granted"].asBool().unwrapOr(false);
+		auto grant = gdvn::models::OtpGrantResponseModel::fromJson(jsonResult.unwrap());
 
-		if (!granted) {
+		if (!grant.granted) {
 			FLAlertLayer::create("GDVN Login", "Access has not been granted yet.\nPlease grant access on the website first.", "OK")->show();
 			return;
 		}
 
-		if (!json["key"].isString() || !json["player"].isString()) {
+		if (!grant.valid) {
 			log::warn("Failed to verify OTP code: missing credentials");
 			FLAlertLayer::create("Error", "Failed to verify login code. Please try again.", "OK")->show();
 			return;
 		}
 
-		std::string key = json["key"].asString().unwrapOrDefault();
-		std::string player = json["player"].asString().unwrapOrDefault();
+		Mod::get()->setSavedValue("api-key", grant.key);
+		Mod::get()->setSavedValue("player-name", grant.player);
 
-		Mod::get()->setSavedValue("api-key", key);
-		Mod::get()->setSavedValue("player-name", player);
-
-		FLAlertLayer::create("GDVN Login", "You are logged in as <cg>" + player + "</c>", "OK")->show();
+		FLAlertLayer::create("GDVN Login", "You are logged in as <cg>" + grant.player + "</c>", "OK")->show();
 	});
 }
 
@@ -207,13 +202,13 @@ void AuthService::check() {
             return;
         }
 
-        auto json = jsonResult.unwrap();
-        if (!json["name"].isString()) {
+        auto authMe = gdvn::models::AuthMeResponseModel::fromJson(jsonResult.unwrap());
+        if (!authMe.valid) {
             log::warn("Failed to check login status: invalid response");
             return;
         }
 
-        Mod::get()->setSavedValue("player-name", json["name"].asString().unwrapOrDefault());
+        Mod::get()->setSavedValue("player-name", authMe.name);
 
         auto successToast = geode::Notification::create(
         "Logged in as " + AuthService::getPlayerName(),

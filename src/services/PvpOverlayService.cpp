@@ -3,6 +3,7 @@
 #include "AuthService.hpp"
 #include "PvpSubmitterService.hpp"
 #include "../common.hpp"
+#include "../models/PvpModels.hpp"
 
 #include <Geode/binding/ButtonSprite.hpp>
 #include <Geode/ui/Notification.hpp>
@@ -600,13 +601,19 @@ void PvpOverlayService::requestMatch() {
 			return;
 		}
 
-		auto json = res.json();
-		if (!json) {
+		auto jsonResult = res.json();
+		if (!jsonResult) {
 			log::warn("Failed to parse Versus overlay match snapshot");
 			return;
 		}
 
-		this->parseMatchSnapshot(json.unwrap());
+		auto match = gdvn::models::ActivePvpMatchResponseModel::fromJson(jsonResult.unwrap());
+		if (!match.valid) {
+			log::warn("Failed to map Versus overlay match snapshot");
+			return;
+		}
+
+		this->parseMatchSnapshot(match.rawJson);
 		this->refreshLabel();
 
 		if (this->isReadyForRealtime()) {
@@ -690,11 +697,16 @@ void PvpOverlayService::requestRealtimeToken() {
 			return;
 		}
 
-		auto json = jsonResult.unwrap();
-		m_supabaseUrl = getString(json, "supabaseUrl");
-		m_anonKey = getString(json, "anonKey");
-		m_realtimeAccessToken = getString(json, "accessToken");
-		m_realtimeTokenExpiresAt = getInteger(json, "expiresAt");
+		auto token = gdvn::models::RealtimeTokenResponseModel::fromJson(jsonResult.unwrap());
+		if (!token.valid) {
+			log::warn("Failed to map Versus realtime token");
+			return;
+		}
+
+		m_supabaseUrl = token.supabaseUrl;
+		m_anonKey = token.anonKey;
+		m_realtimeAccessToken = token.accessToken;
+		m_realtimeTokenExpiresAt = token.expiresAt;
 		this->connectRealtime();
 	});
 }

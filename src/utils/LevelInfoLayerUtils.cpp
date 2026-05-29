@@ -61,40 +61,7 @@ std::string toAsciiCompatible(std::string text) {
 	return ascii;
 }
 
-std::string getListLabel(matjson::Value const& list) {
-	if (list["slug"].isString()) {
-		std::string slug = list["slug"].asString().unwrap();
-
-		if (!slug.empty()) {
-			return slug;
-		}
-	}
-
-	if (list["title"].isString()) {
-		return list["title"].asString().unwrap();
-	}
-
-	return "List";
-}
-
-bool isOfficialList(matjson::Value const& list) {
-	return list["isOfficial"].isBool() && list["isOfficial"].asBool().unwrap();
-}
-
-bool isStarredList(matjson::Value const& list) {
-	if (list["starred"].isBool()) {
-		return list["starred"].asBool().unwrap();
-	}
-
-	return !isOfficialList(list);
-}
-
-std::string formatNumber(matjson::Value const& value) {
-	if (!value.isNumber()) {
-		return "";
-	}
-
-	double number = value.asDouble().unwrap();
+std::string formatNumber(double number) {
 	int integer = static_cast<int>(number);
 
 	if (number == static_cast<double>(integer)) {
@@ -114,34 +81,23 @@ std::string formatNumber(matjson::Value const& value) {
 	return formatted;
 }
 
-std::string getListValue(matjson::Value const& list) {
-	auto item = list["item"];
-
-	if (!item.isObject()) {
+std::string getListValue(gdvn::models::LevelListModel const& list) {
+	if (!list.item.position && !list.item.rating) {
 		return "";
-	}
-
-	bool topMode = false;
-
-	if (list["topEnabled"].isBool()) {
-		topMode = list["topEnabled"].asBool().unwrap();
-	}
-	else if (list["mode"].isString()) {
-		topMode = list["mode"].asString().unwrap() == "top";
 	}
 
 	std::vector<std::string> values;
 
-	if (topMode && item["position"].isNumber()) {
-		values.push_back("#" + formatNumber(item["position"]));
+	if (list.isTopMode() && list.item.position) {
+		values.push_back("#" + formatNumber(*list.item.position));
 	}
 
-	if (item["rating"].isNumber()) {
-		values.push_back(formatNumber(item["rating"]) + "pt");
+	if (list.item.rating) {
+		values.push_back(formatNumber(*list.item.rating) + "pt");
 	}
 
-	if (!topMode && values.empty() && item["position"].isNumber()) {
-		values.push_back("#" + formatNumber(item["position"]));
+	if (!list.isTopMode() && values.empty() && list.item.position) {
+		values.push_back("#" + formatNumber(*list.item.position));
 	}
 
 	std::string text;
@@ -213,32 +169,27 @@ CCMenu* ButtonCreator::create(std::vector<std::string> labels, GJGameLevel* leve
 	return menu;
 }
 
-std::vector<std::string> getListInfoLabels(matjson::Value const& json, bool isLoggedIn) {
+std::vector<std::string> getListInfoLabels(
+	std::vector<gdvn::models::LevelListModel> const& lists,
+	bool isLoggedIn
+) {
 	std::vector<std::string> officialLabels;
 	std::vector<std::string> starredLabels;
 
-	if (!json.isArray()) {
-		return officialLabels;
-	}
-
-	for (auto const& list : json.asArray().unwrap()) {
-		if (!list.isObject()) {
-			continue;
-		}
-
+	for (auto const& list : lists) {
 		std::string value = getListValue(list);
 
 		if (value.empty()) {
 			continue;
 		}
 
-		auto label = getListLabel(list) + ": " + value;
+		auto label = list.label() + ": " + value;
 
-		if (isStarredList(list)) {
+		if (list.isStarredList()) {
 			starredLabels.push_back(label);
 		}
 
-		if (isOfficialList(list)) {
+		if (list.isOfficial) {
 			officialLabels.push_back(label);
 		}
 	}

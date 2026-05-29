@@ -1,8 +1,8 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/web.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp> // DO NOT REMOVE
-#include "../common.hpp"
 #include "../services/AuthService.hpp"
+#include "../services/LevelService.hpp"
 #include "../utils/LevelInfoLayerUtils.hpp"
 
 using namespace geode::prelude;
@@ -10,7 +10,6 @@ using namespace gdvn::level_info;
 
 class $modify(LevelInfoLayer) {
 	struct Fields {
-		async::TaskHolder<web::WebResponse> m_holder;
 		bool m_confirmedLoggedOutPlay = false;
 	};
 
@@ -27,18 +26,15 @@ class $modify(LevelInfoLayer) {
 
 		    this->addChild(loadingLabel);
 
-		    web::WebRequest req = web::WebRequest();
-
 			bool isLoggedIn = AuthService::isLoggedIn();
-
-		    if (isLoggedIn) {
-			    req.header("Authorization", "Bearer " + AuthService::getToken());
-		    }
 
 			auto layer = this;
 			layer->retain();
 
-		    m_fields->m_holder.spawn(req.get(API_URL + "/lists/levels/" + std::to_string(id) + "/starred"), [layer, level, loadingLabel, id, isLoggedIn](web::WebResponse res) mutable {
+		    LevelService::getLevel(id, [layer, level, loadingLabel, id, isLoggedIn](
+				gdvn::models::LevelInfoResponseModel const& model,
+				web::WebResponse& res
+			) mutable {
 				auto cleanup = [&]() {
 					if (loadingLabel) {
 						loadingLabel->removeFromParent();
@@ -53,15 +49,13 @@ class $modify(LevelInfoLayer) {
 					return;
 				}
 
-				auto resJsonResult = res.json();
-				if (!resJsonResult) {
+				if (!model.valid) {
 					cleanup();
 					log::warn("Failed to load GDVN level info for level {}", id);
 					return;
 				}
 
-				auto resJson = resJsonResult.unwrap();
-				std::vector<std::string> labels = getListInfoLabels(resJson, isLoggedIn);
+				std::vector<std::string> labels = getListInfoLabels(model.lists, isLoggedIn);
 
 				if (!labels.empty()) {
 					auto btn = ButtonCreator().create(labels, level, layer);
