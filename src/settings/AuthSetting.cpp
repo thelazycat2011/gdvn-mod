@@ -6,7 +6,7 @@
 #include <Geode/binding/FLAlertLayer.hpp>
 
 #include "../services/auth/AuthService.hpp"
-#include "../services/update/VersionCheckerService.hpp"
+#include "../services/updater/UpdaterService.hpp"
 
 using namespace geode::prelude;
 
@@ -210,7 +210,7 @@ class UpdateButtonSettingNodeV3 : public SettingNodeV3 {
     }
 
     void onButton(CCObject*) {
-        VersionCheckerService::checkForUpdate(true);
+        UpdaterService::checkForUpdate(true);
     }
 
     void onCommit() override {

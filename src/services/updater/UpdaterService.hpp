@@ -4,7 +4,7 @@
 
 using namespace geode::prelude;
 
-class VersionCheckerService {
+class UpdaterService {
     static void downloadUpdate();
 
   public:

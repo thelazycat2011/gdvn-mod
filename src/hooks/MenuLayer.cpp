@@ -1,5 +1,5 @@
 #include "../services/auth/AuthService.hpp"
-#include "../services/update/VersionCheckerService.hpp"
+#include "../services/updater/UpdaterService.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 
@@ -22,7 +22,7 @@ class $modify(MenuLayer) {
 
         if (!hasChecked) {
             hasChecked = true;
-            VersionCheckerService::checkForUpdate();
+            UpdaterService::checkForUpdate();
             AuthService::check();
         }
 

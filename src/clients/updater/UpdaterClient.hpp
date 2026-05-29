@@ -9,7 +9,7 @@
 
 using namespace geode::prelude;
 
-class UpdateClient {
+class UpdaterClient {
   public:
     using Callback = std::function<void(EmptyResponseDto const&, web::WebResponse&)>;
     using GetLatestReleaseCallback = std::function<void(GithubReleaseResponseDto const&, web::WebResponse&)>;

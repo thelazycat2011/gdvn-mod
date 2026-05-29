@@ -1,5 +1,5 @@
-#include "VersionCheckerService.hpp"
-#include "../../clients/update/UpdateClient.hpp"
+#include "UpdaterService.hpp"
+#include "../../clients/updater/UpdaterClient.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Dirs.hpp>
 #include <Geode/loader/ModMetadata.hpp>
@@ -12,12 +12,12 @@ static void showUpdateToast(std::string const& message, geode::NotificationIcon 
         [message, icon, time] { geode::Notification::create(message, icon, time)->show(); });
 }
 
-void VersionCheckerService::downloadUpdate() {
+void UpdaterService::downloadUpdate() {
     auto loadingToast =
         geode::Notification::create("Downloading GDVN update...", geode::NotificationIcon::Loading, 10.0f);
     loadingToast->show();
 
-    UpdateClient::getLatestDownload([=](EmptyResponseDto const&, web::WebResponse& res) {
+    UpdaterClient::getLatestDownload([=](EmptyResponseDto const&, web::WebResponse& res) {
         geode::Loader::get()->queueInMainThread([loadingToast] { loadingToast->hide(); });
 
         if (!res.ok()) {
@@ -92,8 +92,8 @@ void VersionCheckerService::downloadUpdate() {
     });
 }
 
-void VersionCheckerService::checkForUpdate(bool notifyIfCurrent) {
-    UpdateClient::getLatestRelease([=](GithubReleaseResponseDto const& release, web::WebResponse& res) {
+void UpdaterService::checkForUpdate(bool notifyIfCurrent) {
+    UpdaterClient::getLatestRelease([=](GithubReleaseResponseDto const& release, web::WebResponse& res) {
         if (!res.ok()) {
             if (notifyIfCurrent) {
                 showUpdateToast("Failed to check for GDVN updates", geode::NotificationIcon::Error);
@@ -121,7 +121,7 @@ void VersionCheckerService::checkForUpdate(bool notifyIfCurrent) {
                                         localVersion + "</c>\nLatest: <cg>" + latestVersion + "</c>",
                                     "Close", "Update", [](auto, bool btn2) {
                                         if (btn2) {
-                                            VersionCheckerService::downloadUpdate();
+                                            UpdaterService::downloadUpdate();
                                         }
                                     });
         });

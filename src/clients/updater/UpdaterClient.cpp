@@ -1,4 +1,4 @@
-#include "UpdateClient.hpp"
+#include "UpdaterClient.hpp"
 
 #include "../../adapters/GithubReleaseResponseAdapter.hpp"
 
@@ -6,7 +6,7 @@ namespace {
 async::TaskHolder<web::WebResponse> s_getHolder;
 }
 
-void UpdateClient::getLatestDownload(Callback callback) {
+void UpdaterClient::getLatestDownload(Callback callback) {
     web::WebRequest req = web::WebRequest();
     req.userAgent("geode");
     auto url = "https://github.com/Demon-List-VN/geode-mod/releases/latest/download/nampe.gdvn.geode";
@@ -17,7 +17,7 @@ void UpdateClient::getLatestDownload(Callback callback) {
     });
 }
 
-void UpdateClient::getLatestRelease(GetLatestReleaseCallback callback) {
+void UpdaterClient::getLatestRelease(GetLatestReleaseCallback callback) {
     web::WebRequest req = web::WebRequest();
     req.userAgent("geode");
     auto url = "https://api.github.com/repos/Demon-List-VN/geode-mod/releases/latest";
