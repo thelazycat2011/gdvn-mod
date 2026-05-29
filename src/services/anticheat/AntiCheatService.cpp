@@ -64,7 +64,7 @@ void AntiCheatService::reset(PlayLayer* playLayer) {
     markRunCheatedIfNeeded();
 }
 
-void AntiCheatService::markRunCheated(std::string const& reason) {
+void AntiCheatService::markRunCheated(std::string const& reason) const {
     if (reportedCheat) {
         return;
     }
@@ -79,7 +79,7 @@ void AntiCheatService::markRunCheated(std::string const& reason) {
     }
 }
 
-void AntiCheatService::markRunCheatedIfNeeded() {
+void AntiCheatService::markRunCheatedIfNeeded() const {
     if (auto reason = getCheatedReason()) {
         markRunCheated(std::string(*reason));
     }
@@ -102,11 +102,11 @@ void AntiCheatService::onPlayerDestroyed(PlayerObject* player) {
     markRunCheatedIfNeeded();
 }
 
-bool AntiCheatService::isCheated() {
+bool AntiCheatService::isCheated() const {
     markRunCheatedIfNeeded();
     return getCheatedReason().has_value();
 }
 
-std::string const& AntiCheatService::getCheatReason() const {
+std::string_view AntiCheatService::getCheatReason() const {
     return reportedCheatReason;
 }

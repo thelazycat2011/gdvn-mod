@@ -7,6 +7,9 @@ void DamageBypassAntiCheatService::reset(PlayLayer* playLayer) {
 void DamageBypassAntiCheatService::onUpdate(float) {
 }
 
+void DamageBypassAntiCheatService::onPlayerDestroyed(PlayerObject*) {
+}
+
 bool DamageBypassAntiCheatService::isCheated() const {
     return playLayer && (playLayer->m_isIgnoreDamageEnabled || playLayer->m_ignoreDamage);
 }

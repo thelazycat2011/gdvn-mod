@@ -7,6 +7,9 @@ void StartPositionAntiCheatService::reset(PlayLayer* playLayer) {
 void StartPositionAntiCheatService::onUpdate(float) {
 }
 
+void StartPositionAntiCheatService::onPlayerDestroyed(PlayerObject*) {
+}
+
 bool StartPositionAntiCheatService::isCheated() const {
     return playLayer && playLayer->m_startPosObject;
 }

@@ -19,6 +19,9 @@ void QolModAntiCheatService::reset(PlayLayer*) {
 void QolModAntiCheatService::onUpdate(float) {
 }
 
+void QolModAntiCheatService::onPlayerDestroyed(PlayerObject*) {
+}
+
 bool QolModAntiCheatService::isCheated() const {
     auto mod = geode::Loader::get()->getLoadedMod("thesillydoggo.qolmod");
 

@@ -1,14 +1,16 @@
 #pragma once
 
+#include "../../interfaces/AntiCheatInterface.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 
 #include <string_view>
 
-class PrismAntiCheatService {
+class PrismAntiCheatService : public AntiCheatInterface {
   public:
-    void reset(PlayLayer* playLayer);
-    void onUpdate(float dt);
-    bool isCheated() const;
-    std::string_view getCheatReason() const;
+    void reset(PlayLayer* playLayer) override;
+    void onUpdate(float dt) override;
+    void onPlayerDestroyed(PlayerObject* player) override;
+    bool isCheated() const override;
+    std::string_view getCheatReason() const override;
 };

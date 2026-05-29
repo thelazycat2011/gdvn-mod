@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../interfaces/AntiCheatInterface.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/PlayLayer.hpp>
 #include <Geode/binding/PlayerObject.hpp>
@@ -16,11 +17,11 @@
 #include <string>
 #include <string_view>
 
-class AntiCheatService {
+class AntiCheatService : public AntiCheatInterface {
   private:
     PlayLayer* playLayer = nullptr;
-    bool reportedCheat = false;
-    std::string reportedCheatReason;
+    mutable bool reportedCheat = false;
+    mutable std::string reportedCheatReason;
     StartPositionAntiCheatService startPositionAntiCheat;
     EclipseAntiCheatService eclipseAntiCheat;
     QolModAntiCheatService qolModAntiCheat;
@@ -29,17 +30,17 @@ class AntiCheatService {
     DamageBypassAntiCheatService damageBypassAntiCheat;
     NoclipAntiCheatService noclipAntiCheat;
 
-    void markRunCheated(std::string const& reason);
-    void markRunCheatedIfNeeded();
+    void markRunCheated(std::string const& reason) const;
+    void markRunCheatedIfNeeded() const;
 
   public:
     AntiCheatService();
     explicit AntiCheatService(PlayLayer* playLayer);
 
-    void reset(PlayLayer* playLayer);
-    void onUpdate(float dt);
-    void onPlayerDestroyed(PlayerObject* player);
-    bool isCheated();
+    void reset(PlayLayer* playLayer) override;
+    void onUpdate(float dt) override;
+    void onPlayerDestroyed(PlayerObject* player) override;
+    bool isCheated() const override;
     std::optional<std::string_view> getCheatedReason() const;
-    std::string const& getCheatReason() const;
+    std::string_view getCheatReason() const override;
 };
