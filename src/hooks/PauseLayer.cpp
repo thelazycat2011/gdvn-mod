@@ -1,4 +1,5 @@
 #include <Geode/Geode.hpp>
+#include <Geode/binding/CCMenuItemToggler.hpp>
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/modify/PauseLayer.hpp> // DO NOT REMOVE
 
@@ -6,6 +7,12 @@
 #include "../ui/components/pvp/PvpChatButton.hpp"
 
 using namespace geode::prelude;
+
+namespace {
+constexpr float MUTE_CHAT_TOGGLE_SCALE = 0.65f;
+constexpr float MUTE_CHAT_LABEL_SCALE = 0.32f;
+constexpr float MUTE_CHAT_LABEL_GAP = 6.0f;
+} // namespace
 
 $on_mod(Loaded) {
     listenForKeybindSettingPresses("open-pvp-chat", [=](Keybind const&, bool down, bool repeat, double) {
@@ -35,8 +42,19 @@ class $modify(GDVNPauseLayer, PauseLayer) {
 
         menu->addChild(PvpChatButton::create());
 
-        this->createToggleButton("Mute Chat", menu_selector(GDVNPauseLayer::onGDVNMuteChat), overlay->isChatMuted(),
-                                 menu, {0.0f, 0.0f});
+        auto muteToggle = CCMenuItemToggler::createWithStandardSprites(
+            this, menu_selector(GDVNPauseLayer::onGDVNMuteChat), MUTE_CHAT_TOGGLE_SCALE);
+        muteToggle->setID("gdvn-pvp-mute-chat-toggle"_spr);
+        muteToggle->toggle(overlay->isChatMuted());
+
+        auto muteLabel = CCLabelBMFont::create("Mute Chat", "bigFont.fnt");
+        muteLabel->setID("gdvn-pvp-mute-chat-label"_spr);
+        muteLabel->setScale(MUTE_CHAT_LABEL_SCALE);
+        muteLabel->setAnchorPoint({1.0f, 0.5f});
+        muteLabel->setPosition({-MUTE_CHAT_LABEL_GAP, muteToggle->getContentSize().height / 2.0f});
+        muteToggle->addChild(muteLabel);
+
+        menu->addChild(muteToggle);
 
         menu->updateLayout();
     }
