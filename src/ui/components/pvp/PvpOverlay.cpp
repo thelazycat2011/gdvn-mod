@@ -5,7 +5,7 @@ PvpOverlay::PvpOverlay(PlayLayer* layer) : m_layer(layer) {
         return;
     }
 
-    m_label = CCLabelBMFont::create("Versus\nYou: 0.00%\nOpponent: 0.00%", "bigFont.fnt");
+    m_label = CCLabelBMFont::create("gdvn.net - Versus\nYou: 0.00%\nOpponent: 0.00%", "bigFont.fnt");
     m_label->setScale(0.32f);
     m_label->setOpacity(180);
     m_label->setVisible(false);

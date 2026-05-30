@@ -804,7 +804,7 @@ void PvpOverlayService::refreshLabel() {
         return;
     }
 
-    m_overlay->setText(fmt::format("Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),
+    m_overlay->setText(fmt::format("gdvn.net - Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),
                                    formatPlayerLabel("Opponent", m_opponent)));
     this->setOverlayVisible(m_active);
 }
