@@ -33,6 +33,8 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
                 locked->inPvp.store(locked->matchID > 0);
                 if (locked->inPvp.load()) {
                     PvpSubmitterService::submitPlayMode(locked, locked->playMode);
+                    PvpSubmitterService::submitProgress(locked, locked->completionPending);
+                    PvpSubmitterService::submitDeathCount(locked);
                 }
             }
         }
@@ -59,12 +61,30 @@ void PvpSubmitterService::submitPlayMode(std::shared_ptr<State> state, std::stri
 }
 
 void PvpSubmitterService::submit(bool completed) {
-    if (!m_state || !m_state->inPvp.load() || m_state->matchID <= 0) {
+    if (!m_state) {
         return;
     }
 
-    PvpClient::putProgress(m_state->matchID, m_state->best, completed,
-                           [=](EmptyResponseDto const&, web::WebResponse& res) {});
+    m_state->completionPending = m_state->completionPending || completed;
+    submitProgress(m_state, m_state->completionPending);
+}
+
+void PvpSubmitterService::submitProgress(std::shared_ptr<State> state, bool completed) {
+    if (!state || !state->inPvp.load() || state->matchID <= 0 || state->best <= 0.0f) {
+        return;
+    }
+
+    const int matchID = state->matchID;
+    const float progress = state->best;
+    const bool submitCompleted = completed || state->completionPending;
+
+    PvpClient::putProgress(matchID, progress, submitCompleted,
+                           [matchID, progress, submitCompleted](EmptyResponseDto const&, web::WebResponse& res) {
+                               if (!res.ok()) {
+                                   log::warn("Failed to submit Versus progress {} for match {}{}: HTTP {}", progress,
+                                             matchID, submitCompleted ? " (completed)" : "", res.code());
+                               }
+                           });
 }
 
 void PvpSubmitterService::submitDeathCount(std::shared_ptr<State> state) {
@@ -145,8 +165,7 @@ void PvpSubmitterService::record(float progress) {
 }
 
 void PvpSubmitterService::recordDeath(float progress) {
-    if (!m_state || !m_state->inPvp.load() || m_state->platformer || !std::isfinite(progress) || progress < 0.0f ||
-        progress > 100.0f) {
+    if (!m_state || m_state->platformer || !std::isfinite(progress) || progress < 0.0f || progress > 100.0f) {
         return;
     }
 
@@ -155,11 +174,13 @@ void PvpSubmitterService::recordDeath(float progress) {
     if (progress > m_state->best) {
         m_state->best = progress;
         submit();
-        flushDeathCount();
+        if (m_state->inPvp.load()) {
+            flushDeathCount();
+        }
         return;
     }
 
-    if (sumDeathCount(m_state->pendingDeathCount) >= 100) {
+    if (m_state->inPvp.load() && sumDeathCount(m_state->pendingDeathCount) >= 100) {
         flushDeathCount();
     }
 }
@@ -169,7 +190,7 @@ void PvpSubmitterService::flushDeathCount() {
 }
 
 void PvpSubmitterService::recordCheckpoint(int count) {
-    if (!m_state || !m_state->platformer || count <= m_state->best) {
+    if (!m_state || count <= m_state->best) {
         return;
     }
 
@@ -178,10 +199,11 @@ void PvpSubmitterService::recordCheckpoint(int count) {
 }
 
 void PvpSubmitterService::completePlatformer(int count) {
-    if (!m_state || !m_state->platformer) {
+    if (!m_state) {
         return;
     }
 
+    m_state->completionPending = true;
     if (count > m_state->best) {
         m_state->best = static_cast<float>(count);
     }

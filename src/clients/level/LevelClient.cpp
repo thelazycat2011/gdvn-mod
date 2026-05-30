@@ -3,8 +3,11 @@
 #include "../../adapters/ActivePvpMatchResponseAdapter.hpp"
 #include "../../adapters/LevelInfoResponseAdapter.hpp"
 #include "../../consts/ConfigConst.hpp"
+#include <algorithm>
+#include <memory>
+#include <vector>
 
-async::TaskHolder<web::WebResponse> LevelClient::s_getHolder;
+std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> LevelClient::s_getHolders;
 
 void LevelClient::getLevel(int id, GetLevelCallback callback) {
     web::WebRequest req;
@@ -16,7 +19,12 @@ void LevelClient::getLevel(int id, GetLevelCallback callback) {
 
     auto url = gdvn::config::API_URL + "/lists/levels/" + std::to_string(id) + "/starred";
 
-    LevelClient::s_getHolder.spawn(req.get(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    LevelClient::s_getHolders.push_back(holder);
+    holder->spawn(req.get(url), [callback, holder](web::WebResponse res) {
+        auto& holders = LevelClient::s_getHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         LevelInfoResponseDto dto;
 
         if (res.ok()) {
@@ -36,7 +44,12 @@ void LevelClient::getActivePvpMatch(int levelID, GetActivePvpMatchCallback callb
 
     req.header("Authorization", "Bearer " + gdvn::config::getToken());
 
-    LevelClient::s_getHolder.spawn(req.get(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    LevelClient::s_getHolders.push_back(holder);
+    holder->spawn(req.get(url), [callback, holder](web::WebResponse res) {
+        auto& holders = LevelClient::s_getHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         ActivePvpMatchResponseDto dto;
 
         if (res.ok()) {

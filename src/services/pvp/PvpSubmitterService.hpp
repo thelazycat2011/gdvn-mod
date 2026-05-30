@@ -16,6 +16,7 @@ class PvpSubmitterService {
         std::array<size_t, 100> pendingDeathCount = {};
         std::atomic<bool> deathSubmitInFlight{false};
         bool platformer = false;
+        bool completionPending = false;
         std::string playMode = "normal";
         std::string submittedPlayMode;
         std::atomic<bool> inPvp{false};
@@ -27,6 +28,7 @@ class PvpSubmitterService {
     std::shared_ptr<State> m_state;
 
     void submit(bool completed = false);
+    static void submitProgress(std::shared_ptr<State> state, bool completed = false);
     static void submitDeathCount(std::shared_ptr<State> state);
     static void submitPlayMode(std::shared_ptr<State> state, std::string const& playMode);
     static std::string serializeDeathCount(std::array<size_t, 100> const& count);

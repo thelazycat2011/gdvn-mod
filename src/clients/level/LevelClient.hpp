@@ -3,7 +3,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/web.hpp>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "../../dtos/level/LevelInfoResponseDto.hpp"
 #include "../../dtos/pvp/ActivePvpMatchResponseDto.hpp"
@@ -19,5 +21,5 @@ class LevelClient {
     static void getActivePvpMatch(int levelID, GetActivePvpMatchCallback callback);
 
   private:
-    static async::TaskHolder<web::WebResponse> s_getHolder;
+    static std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> s_getHolders;
 };
