@@ -6,7 +6,8 @@
 #include "../../clients/level/LevelClient.hpp"
 #include "../../clients/pvp/PvpClient.hpp"
 #include "../../consts/ConfigConst.hpp"
-#include "../../consts/PvpWebsocketEventConst.hpp"
+#include "../../consts/TableConst.hpp"
+#include "../../consts/WebsocketEventConst.hpp"
 #include "../../ui/components/pvp/PvpChatPopup.hpp"
 #include "../../ui/components/pvp/PvpOverlay.hpp"
 #include "../../ui/components/pvp/PvpRecentChatStack.hpp"
@@ -357,14 +358,14 @@ void PvpOverlayService::handleRealtimeMessage(PvpMatchRealtimeMessageDto const& 
         return;
     }
 
-    if (message.table == gdvn::consts::PvpWebsocketEvent::RESULT_TABLE) {
+    if (message.table == gdvn::consts::Table::PVP_MATCH_RESULTS) {
         this->handleResultRow(PvpMatchAdapter::playerProgressFromJson(message.row));
         this->refreshLabel();
         this->scheduleMessageRefresh();
-    } else if (message.table == gdvn::consts::PvpWebsocketEvent::MATCH_TABLE) {
+    } else if (message.table == gdvn::consts::WebsocketEvent::MATCH_TABLE) {
         this->handleMatchRow(PvpMatchAdapter::matchRowFromJson(message.row));
         this->scheduleMessageRefresh();
-    } else if (message.table == gdvn::consts::PvpWebsocketEvent::MESSAGE_TABLE) {
+    } else if (message.table == gdvn::consts::WebsocketEvent::MESSAGE_TABLE) {
         log::info("Versus realtime chat event received: match={}, id={}", message.rowMatchID, message.rowID);
         this->handleMessageRow(PvpMessageAdapter::fromJson(message.row), true);
         this->scheduleMessageRefresh();

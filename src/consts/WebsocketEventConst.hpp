@@ -1,6 +1,6 @@
 #pragma once
 
-namespace gdvn::consts::PvpWebsocketEvent {
+namespace gdvn::consts::WebsocketEvent {
 
 inline constexpr char ACCESS_TOKEN[] = "access_token";
 inline constexpr char API_KEY[] = "apikey";
@@ -24,8 +24,6 @@ inline constexpr char PRESENCE[] = "presence";
 inline constexpr char PRIVATE[] = "private";
 inline constexpr char PUBLIC_SCHEMA[] = "public";
 inline constexpr char REF[] = "ref";
-inline constexpr char RESULT_TABLE[] = "pvpMatchResults";
-inline constexpr char ROW_ID_FILTER_PREFIX[] = "id=eq.";
 inline constexpr char SCHEMA[] = "schema";
 inline constexpr char STATUS[] = "status";
 inline constexpr char TABLE[] = "table";
@@ -33,4 +31,4 @@ inline constexpr char TOPIC[] = "topic";
 inline constexpr char UPDATE[] = "UPDATE";
 inline constexpr char VSN[] = "vsn";
 
-} // namespace gdvn::consts::PvpWebsocketEvent
+} // namespace gdvn::consts::WebsocketEvent
