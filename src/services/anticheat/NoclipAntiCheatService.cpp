@@ -9,8 +9,19 @@ void NoclipAntiCheatService::onUpdate(float) {
 }
 
 void NoclipAntiCheatService::onPlayerDestroyed(PlayerObject* player) {
-    if (playLayer && player && !player->m_isDead && !playLayer->m_levelEndAnimationStarted) {
+    const float progress = playLayer->getCurrentPercent();
+
+    if (progress < 5.0f) {
+        return;
+    }
+
+    if (!player->m_isDead) {
         cheated = true;
+
+        geode::log::warn(
+            "[NoclipAntiCheatService] Noclip detected at {:.2f}%",
+            progress
+        );
     }
 }
 

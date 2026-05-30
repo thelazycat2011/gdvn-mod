@@ -11,6 +11,7 @@ class NoclipAntiCheatService : public AntiCheatInterface {
   private:
     PlayLayer* playLayer = nullptr;
     bool cheated = false;
+    float prevProgress = 0.0f;
 
   public:
     void reset(PlayLayer* playLayer) override;
