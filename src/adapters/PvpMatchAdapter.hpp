@@ -88,6 +88,7 @@ class PvpMatchAdapter {
 
     static PvpMatchRowDto matchRowFromJson(matjson::Value const& json) {
         PvpMatchRowDto dto;
+        dto.levelID = static_cast<int>(getInteger(json, "levelId"));
         dto.mode = getString(json, "mode");
         dto.endsAt = getString(json, "endsAt");
         dto.status = getString(json, "status");

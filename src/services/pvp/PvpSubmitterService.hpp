@@ -12,6 +12,7 @@ class PvpSubmitterService {
     struct State {
         int levelID = 0;
         int matchID = 0;
+        int matchLevelID = 0;
         float best = 0;
         std::array<size_t, 100> pendingDeathCount = {};
         std::atomic<bool> deathSubmitInFlight{false};
@@ -31,6 +32,7 @@ class PvpSubmitterService {
     static void submitProgress(std::shared_ptr<State> state, bool completed = false);
     static void submitDeathCount(std::shared_ptr<State> state);
     static void submitPlayMode(std::shared_ptr<State> state, std::string const& playMode);
+    static bool isLevelValid(std::shared_ptr<State> state);
     static std::string serializeDeathCount(std::array<size_t, 100> const& count);
     static size_t sumDeathCount(std::array<size_t, 100> const& count);
 
@@ -39,6 +41,7 @@ class PvpSubmitterService {
     ~PvpSubmitterService();
     PvpSubmitterService(int levelID, std::string playMode = "normal");
     bool isPlatformerPvp() const;
+    void setMatchLevelID(int levelID);
     void submitPlayMode(std::string const& playMode);
     void record(float progress);
     void recordDeath(float progress);

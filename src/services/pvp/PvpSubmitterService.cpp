@@ -28,10 +28,13 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
 
         if (match.valid) {
             if (auto locked = state.lock()) {
+                if (locked->matchLevelID <= 0) {
+                    locked->matchLevelID = match.levelID > 0 ? match.levelID : locked->levelID;
+                }
                 locked->matchID = match.matchID;
                 locked->platformer = match.mode == "platformer";
                 locked->inPvp.store(locked->matchID > 0);
-                if (locked->inPvp.load()) {
+                if (locked->inPvp.load() && PvpSubmitterService::isLevelValid(locked)) {
                     PvpSubmitterService::submitPlayMode(locked, locked->playMode);
                     PvpSubmitterService::submitProgress(locked, locked->completionPending);
                     PvpSubmitterService::submitDeathCount(locked);
@@ -42,7 +45,7 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
 }
 
 void PvpSubmitterService::submitPlayMode(std::shared_ptr<State> state, std::string const& playMode) {
-    if (!state || !state->inPvp.load() || state->matchID <= 0) {
+    if (!state || !state->inPvp.load() || state->matchID <= 0 || !isLevelValid(state)) {
         return;
     }
 
@@ -70,7 +73,7 @@ void PvpSubmitterService::submit(bool completed) {
 }
 
 void PvpSubmitterService::submitProgress(std::shared_ptr<State> state, bool completed) {
-    if (!state || !state->inPvp.load() || state->matchID <= 0 || state->best <= 0.0f) {
+    if (!state || !state->inPvp.load() || state->matchID <= 0 || state->best <= 0.0f || !isLevelValid(state)) {
         return;
     }
 
@@ -88,7 +91,7 @@ void PvpSubmitterService::submitProgress(std::shared_ptr<State> state, bool comp
 }
 
 void PvpSubmitterService::submitDeathCount(std::shared_ptr<State> state) {
-    if (!state || !state->inPvp.load() || state->platformer || state->matchID <= 0) {
+    if (!state || !state->inPvp.load() || state->platformer || state->matchID <= 0 || !isLevelValid(state)) {
         return;
     }
 
@@ -120,6 +123,10 @@ void PvpSubmitterService::submitDeathCount(std::shared_ptr<State> state) {
         });
 }
 
+bool PvpSubmitterService::isLevelValid(std::shared_ptr<State> state) {
+    return state && state->levelID > 0 && state->matchLevelID == state->levelID;
+}
+
 std::string PvpSubmitterService::serializeDeathCount(std::array<size_t, 100> const& count) {
     std::string res;
 
@@ -144,6 +151,14 @@ size_t PvpSubmitterService::sumDeathCount(std::array<size_t, 100> const& count) 
 
 bool PvpSubmitterService::isPlatformerPvp() const {
     return m_state && m_state->inPvp.load() && m_state->platformer;
+}
+
+void PvpSubmitterService::setMatchLevelID(int levelID) {
+    if (!m_state) {
+        return;
+    }
+
+    m_state->matchLevelID = levelID;
 }
 
 void PvpSubmitterService::submitPlayMode(std::string const& playMode) {

@@ -71,6 +71,7 @@ class PvpOverlayService final {
     bool m_cleanedUp = false;
     bool m_connecting = false;
     bool m_requestingRealtimeToken = false;
+    bool m_hideOverlayForLevelChange = false;
 
     std::int64_t m_latestMessageID = 0;
     std::int64_t m_realtimeTokenExpiresAt = 0;

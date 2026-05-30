@@ -14,6 +14,10 @@ class ActivePvpMatchResponseAdapter {
             dto.matchID = static_cast<int>(json["matchId"].asDouble().unwrapOr(0.0));
         }
 
+        if (json["levelId"].isNumber()) {
+            dto.levelID = static_cast<int>(json["levelId"].asDouble().unwrapOr(0.0));
+        }
+
         if (json["mode"].isString()) {
             dto.mode = json["mode"].asString().unwrapOrDefault();
         }
@@ -21,4 +25,3 @@ class ActivePvpMatchResponseAdapter {
         return dto;
     }
 };
-

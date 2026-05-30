@@ -401,6 +401,9 @@ void PvpOverlayService::handleResultRow(PvpMatchPlayerProgressDto const& row) {
 
 void PvpOverlayService::handleMatchRow(PvpMatchRowDto const& row) {
     const bool wasActive = m_active;
+    if (m_submitter && row.levelID > 0) {
+        m_submitter->setMatchLevelID(row.levelID);
+    }
     if (row.mode == "platformer") {
         m_mode = "platformer";
     }
@@ -515,9 +518,18 @@ void PvpOverlayService::handleSystemMetadata(PvpMatchSystemMetadataDto const& me
     auto kind = metadata.kind;
 
     if (kind == "level_changed") {
+        auto nextLevelID = static_cast<int>(metadata.nextLevelID);
+        if (m_submitter && nextLevelID > 0) {
+            m_submitter->setMatchLevelID(nextLevelID);
+        }
         m_self.playMode = "normal";
         m_opponent.playMode = "normal";
-        this->refreshLabel();
+        m_hideOverlayForLevelChange = nextLevelID > 0 && nextLevelID != m_levelID;
+        if (m_hideOverlayForLevelChange) {
+            this->setOverlayVisible(false);
+        } else {
+            this->refreshLabel();
+        }
         return;
     }
 
@@ -787,6 +799,11 @@ void PvpOverlayService::refreshLabel() {
         countdownSeconds >= 0 ? fmt::format("\nTime: {}", gdvn::utils::date::formatCountdown(countdownSeconds)) : "";
     m_lastCountdownSeconds = countdownSeconds;
 
+    if (m_hideOverlayForLevelChange) {
+        this->setOverlayVisible(false);
+        return;
+    }
+
     m_overlay->setText(fmt::format("Versus{}\n{}\n{}", timerLine, formatPlayerLabel("You", m_self),
                                    formatPlayerLabel("Opponent", m_opponent)));
     this->setOverlayVisible(m_active);
@@ -807,7 +824,7 @@ void PvpOverlayService::refreshChatVisibility() {
 
 void PvpOverlayService::setOverlayVisible(bool visible) {
     if (m_overlay) {
-        m_overlay->setVisible(visible);
+        m_overlay->setVisible(visible && !m_hideOverlayForLevelChange);
     }
 }
 
