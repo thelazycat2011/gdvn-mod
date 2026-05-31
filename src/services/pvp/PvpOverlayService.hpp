@@ -39,6 +39,7 @@ class PvpOverlayService final {
     bool isChatUsable() const;
     bool isChatMuted() const;
     void setChatMuted(bool muted);
+    void applyLocalScoreDelta(int matchID, float delta);
     void submitChatMessage(std::string content);
     void notifyChatPopupClosed(PvpChatPopup* popup);
     std::string getChatHistoryText() const;

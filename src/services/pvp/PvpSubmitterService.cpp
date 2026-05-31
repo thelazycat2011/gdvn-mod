@@ -6,6 +6,7 @@
 #include "../../clients/level/LevelClient.hpp"
 #include "../../clients/pvp/PvpClient.hpp"
 #include "../auth/AuthService.hpp"
+#include "PvpOverlayService.hpp"
 
 PvpSubmitterService::PvpSubmitterService() : m_state(std::make_shared<State>()) {
 }
@@ -222,6 +223,9 @@ void PvpSubmitterService::submitScoreSubmission(std::shared_ptr<State> state) {
                 }
                 if (submission.death) {
                     locked->pendingDeathCount = {};
+                    if (auto overlay = PvpOverlayService::getActive()) {
+                        overlay->applyLocalScoreDelta(matchID, input);
+                    }
                 }
             } else {
                 log::warn("Failed to submit Versus score {} for match {} with input {}: HTTP {}", kind, matchID,
