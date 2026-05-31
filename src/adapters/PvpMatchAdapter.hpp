@@ -16,8 +16,13 @@ class PvpMatchAdapter {
     static PvpMatchSnapshotDto matchSnapshotFromJson(matjson::Value const& json) {
         PvpMatchSnapshotDto dto;
         dto.matchID = static_cast<int>(getNumber(json, "matchId"));
+        if (dto.matchID <= 0) {
+            dto.matchID = static_cast<int>(getNumber(json, "id"));
+        }
         dto.currentUid = getString(json, "currentUid");
         dto.mode = getString(json, "mode") == "platformer" ? "platformer" : "classic";
+        dto.scoringMode = getScoringMode(json);
+        dto.targetScore = static_cast<int>(getTargetScore(json));
         dto.context = getString(json, "context");
         dto.roomName = getString(json, "roomName");
         if (dto.roomName.empty() && json["room"].isObject()) {
@@ -105,6 +110,8 @@ class PvpMatchAdapter {
         PvpMatchRowDto dto;
         dto.levelID = static_cast<int>(getInteger(json, "levelId"));
         dto.mode = getString(json, "mode");
+        dto.scoringMode = getScoringMode(json);
+        dto.targetScore = static_cast<int>(getTargetScore(json));
         dto.endsAt = getString(json, "endsAt");
         dto.status = getString(json, "status");
         return dto;
@@ -122,6 +129,8 @@ class PvpMatchAdapter {
         dto.playMode = getString(json, "playMode");
         dto.progress = getNumber(json, "progress");
         dto.mode = getString(json, "mode");
+        dto.scoringMode = getScoringMode(json);
+        dto.targetScore = static_cast<int>(getTargetScore(json));
         dto.winnerUid = getString(json, "winnerUid");
         dto.resigningUid = getString(json, "resigningUid");
         dto.requesterUid = getString(json, "requesterUid");
@@ -152,6 +161,39 @@ class PvpMatchAdapter {
         }
 
         return static_cast<float>(json[key].asDouble().unwrapOr(0.0));
+    }
+
+    static std::string getScoringMode(matjson::Value const& json) {
+        auto mode = getString(json, "scoringMode");
+        if (mode.empty()) {
+            mode = getString(json, "scoring_mode");
+        }
+        if (mode.empty()) {
+            mode = getString(json, "scoreMode");
+        }
+        if (mode.empty() && json["match"].isObject()) {
+            mode = getScoringMode(json["match"]);
+        }
+        if (mode.empty() && json["room"].isObject()) {
+            mode = getScoringMode(json["room"]);
+        }
+
+        return mode == "score" ? "score" : "progress";
+    }
+
+    static std::int64_t getTargetScore(matjson::Value const& json) {
+        auto value = getInteger(json, "targetScore");
+        if (value <= 0) {
+            value = getInteger(json, "target_score");
+        }
+        if (value <= 0 && json["match"].isObject()) {
+            value = getTargetScore(json["match"]);
+        }
+        if (value <= 0 && json["room"].isObject()) {
+            value = getTargetScore(json["room"]);
+        }
+
+        return value;
     }
 
     static PvpMatchPlayerProgressDto participantFromJson(matjson::Value const& json) {
