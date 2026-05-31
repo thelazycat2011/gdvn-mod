@@ -4,28 +4,35 @@
 #include <Geode/utils/web.hpp>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "../../dtos/common/EmptyResponseDto.hpp"
 #include "../../dtos/pvp/PvpMessageDto.hpp"
 #include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
+#include "../../dtos/pvp/match/PvpMatchSnapshotDto.hpp"
 
 using namespace geode::prelude;
 
 class PvpClient {
   public:
     using Callback = std::function<void(EmptyResponseDto const&, web::WebResponse&)>;
+    using GetMatchCallback = std::function<void(PvpMatchSnapshotDto const&, web::WebResponse&)>;
     using GetMessagesCallback = std::function<void(PvpMessagesResponseDto const&, web::WebResponse&)>;
     using PostMessageCallback = std::function<void(PvpMessageDto const&, web::WebResponse&)>;
 
+    static void getMatch(int matchID, GetMatchCallback callback);
     static void putPlayMode(int matchID, std::string const& playMode, Callback callback);
     static void putProgress(int matchID, float progress, bool completed, Callback callback);
+    static void postDeathProgress(int matchID, float progress, Callback callback);
     static void postDeathCount(int matchID, std::string const& count, Callback callback);
     static void getMessages(int matchID, std::int64_t afterID, int limit, GetMessagesCallback callback);
     static void postMessage(int matchID, std::string const& content, PostMessageCallback callback);
 
   private:
     static async::TaskHolder<web::WebResponse> s_putHolder;
-    static async::TaskHolder<web::WebResponse> s_postHolder;
+    static std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> s_postHolders;
+    static std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> s_getMatchHolders;
     static async::TaskHolder<web::WebResponse> s_getHolder;
 };

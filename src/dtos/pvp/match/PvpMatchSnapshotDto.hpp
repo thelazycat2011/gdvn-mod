@@ -8,6 +8,8 @@ struct PvpMatchSnapshotDto {
     int matchID = 0;
     std::string currentUid;
     std::string mode = "classic";
+    std::string scoringMode = "progress";
+    int targetScore = 0;
     std::string context = "versus";
     std::string roomName;
     std::string endsAt;

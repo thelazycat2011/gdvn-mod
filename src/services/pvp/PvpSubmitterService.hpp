@@ -5,19 +5,29 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace geode::prelude;
 
 class PvpSubmitterService {
+    struct ScoreSubmission {
+        float value = 0.0f;
+        bool death = false;
+    };
+
     struct State {
         int levelID = 0;
         int matchID = 0;
         int matchLevelID = 0;
         float best = 0;
         std::array<size_t, 100> pendingDeathCount = {};
+        std::vector<ScoreSubmission> pendingScoreSubmissions;
         std::atomic<bool> deathSubmitInFlight{false};
+        std::atomic<bool> scoreSubmitInFlight{false};
         bool platformer = false;
         bool completionPending = false;
+        bool scoreMode = false;
+        bool matchLookupCompleted = false;
         std::string playMode = "normal";
         std::string submittedPlayMode;
         std::atomic<bool> inPvp{false};
@@ -31,6 +41,7 @@ class PvpSubmitterService {
     void submit(bool completed = false);
     static void submitProgress(std::shared_ptr<State> state, bool completed = false);
     static void submitDeathCount(std::shared_ptr<State> state);
+    static void submitScoreSubmission(std::shared_ptr<State> state);
     static void submitPlayMode(std::shared_ptr<State> state, std::string const& playMode);
     static bool isLevelValid(std::shared_ptr<State> state);
     static std::string serializeDeathCount(std::array<size_t, 100> const& count);
