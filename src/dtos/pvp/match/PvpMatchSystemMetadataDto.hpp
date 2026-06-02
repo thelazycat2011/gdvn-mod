@@ -12,6 +12,8 @@ struct PvpMatchSystemMetadataDto {
     std::string mode;
     std::string scoringMode = "progress";
     int targetScore = 0;
+    int startingHp = 0;
+    int finalizeAliveCount = 0;
     std::string winnerUid;
     std::string resigningUid;
     std::string requesterUid;

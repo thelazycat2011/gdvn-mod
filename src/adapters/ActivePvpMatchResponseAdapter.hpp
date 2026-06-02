@@ -25,6 +25,8 @@ class ActivePvpMatchResponseAdapter {
 
         dto.scoringMode = readScoringMode(json);
         dto.targetScore = static_cast<int>(readTargetScore(json));
+        dto.startingHp = static_cast<int>(readStartingHp(json));
+        dto.finalizeAliveCount = static_cast<int>(readFinalizeAliveCount(json));
 
         if (json["status"].isString()) {
             dto.status = json["status"].asString().unwrapOrDefault();
@@ -73,7 +75,7 @@ class ActivePvpMatchResponseAdapter {
             mode = readScoringMode(json["room"]);
         }
 
-        return mode == "score" ? "score" : "progress";
+        return mode == "score" || mode == "hp" ? mode : "progress";
     }
 
     static std::int64_t readTargetScore(matjson::Value const& json) {
@@ -86,6 +88,36 @@ class ActivePvpMatchResponseAdapter {
         }
         if (value <= 0 && json["room"].isObject()) {
             value = readTargetScore(json["room"]);
+        }
+
+        return value;
+    }
+
+    static std::int64_t readStartingHp(matjson::Value const& json) {
+        auto value = readInteger(json, "startingHp");
+        if (value <= 0) {
+            value = readInteger(json, "starting_hp");
+        }
+        if (value <= 0 && json["match"].isObject()) {
+            value = readStartingHp(json["match"]);
+        }
+        if (value <= 0 && json["room"].isObject()) {
+            value = readStartingHp(json["room"]);
+        }
+
+        return value;
+    }
+
+    static std::int64_t readFinalizeAliveCount(matjson::Value const& json) {
+        auto value = readInteger(json, "finalizeAliveCount");
+        if (value <= 0) {
+            value = readInteger(json, "finalize_alive_count");
+        }
+        if (value <= 0 && json["match"].isObject()) {
+            value = readFinalizeAliveCount(json["match"]);
+        }
+        if (value <= 0 && json["room"].isObject()) {
+            value = readFinalizeAliveCount(json["room"]);
         }
 
         return value;

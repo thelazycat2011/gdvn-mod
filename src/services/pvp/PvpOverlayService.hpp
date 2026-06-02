@@ -84,6 +84,8 @@ class PvpOverlayService final {
     std::string m_mode = "classic";
     std::string m_scoringMode = "progress";
     int m_targetScore = 0;
+    int m_startingHp = 0;
+    int m_finalizeAliveCount = 0;
     std::string m_context = "versus";
     std::string m_roomName;
     PvpOverlayPlayerProgressModel m_self;

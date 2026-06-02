@@ -23,6 +23,8 @@ class PvpMatchAdapter {
         dto.mode = getString(json, "mode") == "platformer" ? "platformer" : "classic";
         dto.scoringMode = getScoringMode(json);
         dto.targetScore = static_cast<int>(getTargetScore(json));
+        dto.startingHp = static_cast<int>(getStartingHp(json));
+        dto.finalizeAliveCount = static_cast<int>(getFinalizeAliveCount(json));
         dto.context = getString(json, "context");
         dto.roomName = getString(json, "roomName");
         if (dto.roomName.empty() && json["room"].isObject()) {
@@ -112,6 +114,8 @@ class PvpMatchAdapter {
         dto.mode = getString(json, "mode");
         dto.scoringMode = getScoringMode(json);
         dto.targetScore = static_cast<int>(getTargetScore(json));
+        dto.startingHp = static_cast<int>(getStartingHp(json));
+        dto.finalizeAliveCount = static_cast<int>(getFinalizeAliveCount(json));
         dto.endsAt = getString(json, "endsAt");
         dto.status = getString(json, "status");
         return dto;
@@ -131,6 +135,8 @@ class PvpMatchAdapter {
         dto.mode = getString(json, "mode");
         dto.scoringMode = getScoringMode(json);
         dto.targetScore = static_cast<int>(getTargetScore(json));
+        dto.startingHp = static_cast<int>(getStartingHp(json));
+        dto.finalizeAliveCount = static_cast<int>(getFinalizeAliveCount(json));
         dto.winnerUid = getString(json, "winnerUid");
         dto.resigningUid = getString(json, "resigningUid");
         dto.requesterUid = getString(json, "requesterUid");
@@ -178,7 +184,7 @@ class PvpMatchAdapter {
             mode = getScoringMode(json["room"]);
         }
 
-        return mode == "score" ? "score" : "progress";
+        return mode == "score" || mode == "hp" ? mode : "progress";
     }
 
     static std::int64_t getTargetScore(matjson::Value const& json) {
@@ -191,6 +197,36 @@ class PvpMatchAdapter {
         }
         if (value <= 0 && json["room"].isObject()) {
             value = getTargetScore(json["room"]);
+        }
+
+        return value;
+    }
+
+    static std::int64_t getStartingHp(matjson::Value const& json) {
+        auto value = getInteger(json, "startingHp");
+        if (value <= 0) {
+            value = getInteger(json, "starting_hp");
+        }
+        if (value <= 0 && json["match"].isObject()) {
+            value = getStartingHp(json["match"]);
+        }
+        if (value <= 0 && json["room"].isObject()) {
+            value = getStartingHp(json["room"]);
+        }
+
+        return value;
+    }
+
+    static std::int64_t getFinalizeAliveCount(matjson::Value const& json) {
+        auto value = getInteger(json, "finalizeAliveCount");
+        if (value <= 0) {
+            value = getInteger(json, "finalize_alive_count");
+        }
+        if (value <= 0 && json["match"].isObject()) {
+            value = getFinalizeAliveCount(json["match"]);
+        }
+        if (value <= 0 && json["room"].isObject()) {
+            value = getFinalizeAliveCount(json["room"]);
         }
 
         return value;
