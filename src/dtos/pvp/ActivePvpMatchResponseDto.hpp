@@ -10,6 +10,8 @@ struct ActivePvpMatchResponseDto {
     std::string mode;
     std::string scoringMode = "progress";
     int targetScore = 0;
+    int startingHp = 0;
+    int finalizeAliveCount = 0;
     std::string status;
     std::string context = "versus";
     std::string roomName;

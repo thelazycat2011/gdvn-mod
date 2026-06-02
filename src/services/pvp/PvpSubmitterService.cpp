@@ -34,21 +34,22 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
                 }
                 locked->matchID = resolvedMatch.matchID;
                 locked->platformer = resolvedMatch.mode == "platformer";
-                locked->scoreMode = resolvedMatch.scoringMode == "score";
+                locked->scoreMode = resolvedMatch.scoringMode == "score" || resolvedMatch.scoringMode == "hp";
                 locked->inPvp.store(locked->matchID > 0);
                 const bool levelValid = PvpSubmitterService::isLevelValid(locked);
 
                 log::info(
-                    "Active Versus match for level {}: matchID={}, matchLevelID={}, mode={}, scoringMode={}, targetScore={}, status={}, context={}, roomName={}, levelValid={}, queuedScoreEvents={}",
+                    "Active Versus match for level {}: matchID={}, matchLevelID={}, mode={}, scoringMode={}, targetScore={}, startingHp={}, finalizeAliveCount={}, status={}, context={}, roomName={}, levelValid={}, queuedScoreEvents={}",
                     locked->levelID, locked->matchID, locked->matchLevelID, resolvedMatch.mode,
-                    resolvedMatch.scoringMode, resolvedMatch.targetScore, resolvedMatch.status, resolvedMatch.context,
-                    resolvedMatch.roomName, levelValid, locked->pendingScoreSubmissions.size()
+                    resolvedMatch.scoringMode, resolvedMatch.targetScore, resolvedMatch.startingHp,
+                    resolvedMatch.finalizeAliveCount, resolvedMatch.status, resolvedMatch.context, resolvedMatch.roomName,
+                    levelValid, locked->pendingScoreSubmissions.size()
                 );
 
                 if (locked->scoreMode) {
                     log::info(
-                        "Versus score mode active for match {}: queued values are score events, not best progress",
-                        locked->matchID
+                        "Versus {} mode active for match {}: queued values are events, not best progress",
+                        resolvedMatch.scoringMode, locked->matchID
                     );
                 }
 
@@ -93,11 +94,16 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
                     if (detailRes.ok() && detail.matchID > 0) {
                         resolvedMatch.scoringMode = detail.scoringMode;
                         resolvedMatch.targetScore = detail.targetScore;
+                        resolvedMatch.startingHp = detail.startingHp;
+                        resolvedMatch.finalizeAliveCount = detail.finalizeAliveCount;
                         if (!detail.mode.empty()) {
                             resolvedMatch.mode = detail.mode;
                         }
-                        log::info("Resolved custom room scoring metadata for match {}: scoringMode={}, targetScore={}",
-                                  resolvedMatch.matchID, resolvedMatch.scoringMode, resolvedMatch.targetScore);
+                        log::info(
+                            "Resolved custom room scoring metadata for match {}: scoringMode={}, targetScore={}, startingHp={}, finalizeAliveCount={}",
+                            resolvedMatch.matchID, resolvedMatch.scoringMode, resolvedMatch.targetScore,
+                            resolvedMatch.startingHp, resolvedMatch.finalizeAliveCount
+                        );
                     } else if (!detailRes.ok()) {
                         log::warn("Failed to resolve custom room scoring metadata for match {}: HTTP {}",
                                   match.matchID, detailRes.code());

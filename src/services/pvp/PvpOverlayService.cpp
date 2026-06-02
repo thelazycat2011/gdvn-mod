@@ -58,6 +58,19 @@ std::string formatScore(float value, int targetScore) {
     return current;
 }
 
+std::string formatHp(float value, int startingHp) {
+    auto current = formatProgress(value);
+    if (startingHp > 0) {
+        return fmt::format("{}/{} HP", current, startingHp);
+    }
+
+    return current + " HP";
+}
+
+std::string normalizeScoringMode(std::string const& mode) {
+    return mode == "score" || mode == "hp" ? mode : "progress";
+}
+
 } // namespace gdvn::pvp_overlay_detail
 using namespace gdvn::pvp_overlay_detail;
 
@@ -169,10 +182,11 @@ void PvpOverlayService::requestMatch() {
         auto snapshot = PvpMatchAdapter::matchSnapshotFromJson(match.rawJson);
         auto applySnapshot = [this](PvpMatchSnapshotDto const& resolvedSnapshot) {
             log::info(
-                "Versus overlay match for level {}: matchID={}, mode={}, scoringMode={}, targetScore={}, status={}, context={}, roomName={}, participants={}, results={}",
+                "Versus overlay match for level {}: matchID={}, mode={}, scoringMode={}, targetScore={}, startingHp={}, finalizeAliveCount={}, status={}, context={}, roomName={}, participants={}, results={}",
                 m_levelID, resolvedSnapshot.matchID, resolvedSnapshot.mode, resolvedSnapshot.scoringMode,
-                resolvedSnapshot.targetScore, resolvedSnapshot.status, resolvedSnapshot.context,
-                resolvedSnapshot.roomName, resolvedSnapshot.participants.size(), resolvedSnapshot.results.size()
+                resolvedSnapshot.targetScore, resolvedSnapshot.startingHp, resolvedSnapshot.finalizeAliveCount,
+                resolvedSnapshot.status, resolvedSnapshot.context, resolvedSnapshot.roomName,
+                resolvedSnapshot.participants.size(), resolvedSnapshot.results.size()
             );
 
             this->parseMatchSnapshot(resolvedSnapshot);
@@ -194,11 +208,16 @@ void PvpOverlayService::requestMatch() {
                 if (detailRes.ok() && detail.matchID > 0) {
                     resolvedSnapshot.scoringMode = detail.scoringMode;
                     resolvedSnapshot.targetScore = detail.targetScore;
+                    resolvedSnapshot.startingHp = detail.startingHp;
+                    resolvedSnapshot.finalizeAliveCount = detail.finalizeAliveCount;
                     if (!detail.mode.empty()) {
                         resolvedSnapshot.mode = detail.mode;
                     }
-                    log::info("Resolved custom room overlay scoring metadata for match {}: scoringMode={}, targetScore={}",
-                              resolvedSnapshot.matchID, resolvedSnapshot.scoringMode, resolvedSnapshot.targetScore);
+                    log::info(
+                        "Resolved custom room overlay scoring metadata for match {}: scoringMode={}, targetScore={}, startingHp={}, finalizeAliveCount={}",
+                        resolvedSnapshot.matchID, resolvedSnapshot.scoringMode, resolvedSnapshot.targetScore,
+                        resolvedSnapshot.startingHp, resolvedSnapshot.finalizeAliveCount
+                    );
                 } else if (!detailRes.ok()) {
                     log::warn("Failed to resolve custom room overlay scoring metadata for match {}: HTTP {}",
                               snapshot.matchID, detailRes.code());
@@ -217,8 +236,10 @@ void PvpOverlayService::parseMatchSnapshot(PvpMatchSnapshotDto const& snapshot) 
     m_matchID = snapshot.matchID;
     m_currentUid = snapshot.currentUid;
     m_mode = snapshot.mode == "platformer" ? "platformer" : "classic";
-    m_scoringMode = snapshot.scoringMode == "score" ? "score" : "progress";
+    m_scoringMode = normalizeScoringMode(snapshot.scoringMode);
     m_targetScore = std::max(0, snapshot.targetScore);
+    m_startingHp = std::max(0, snapshot.startingHp);
+    m_finalizeAliveCount = std::max(0, snapshot.finalizeAliveCount);
     m_context = snapshot.context == "custom_room" ? "custom_room" : "versus";
     m_roomName = snapshot.roomName;
     m_matchEndsAtEpoch = gdvn::utils::date::parseIsoEpochSeconds(snapshot.endsAt);
@@ -453,7 +474,7 @@ void PvpOverlayService::handleResultRow(PvpMatchPlayerProgressDto const& row) {
         if (!row.name.empty()) {
             existing->name = row.name;
         }
-        existing->progress = std::max(existing->progress, row.progress);
+        existing->progress = m_scoringMode == "hp" ? row.progress : std::max(existing->progress, row.progress);
     }
 
     if (!m_currentUid.empty() && row.uid == m_currentUid) {
@@ -461,7 +482,7 @@ void PvpOverlayService::handleResultRow(PvpMatchPlayerProgressDto const& row) {
         if (!row.name.empty()) {
             m_self.name = row.name;
         }
-        m_self.progress = std::max(m_self.progress, row.progress);
+        m_self.progress = m_scoringMode == "hp" ? row.progress : std::max(m_self.progress, row.progress);
         return;
     }
 
@@ -469,8 +490,8 @@ void PvpOverlayService::handleResultRow(PvpMatchPlayerProgressDto const& row) {
     if (!row.name.empty()) {
         m_opponent.name = row.name;
     }
-    m_opponent.progress = std::max(m_opponent.progress, row.progress);
-    if (m_scoringMode != "score" && row.progress >= 100.0f && m_submitter) {
+    m_opponent.progress = m_scoringMode == "hp" ? row.progress : std::max(m_opponent.progress, row.progress);
+    if (m_scoringMode == "progress" && row.progress >= 100.0f && m_submitter) {
         m_submitter->flushDeathCount();
     }
 }
@@ -483,8 +504,10 @@ void PvpOverlayService::handleMatchRow(PvpMatchRowDto const& row) {
     if (row.mode == "platformer") {
         m_mode = "platformer";
     }
-    m_scoringMode = row.scoringMode == "score" ? "score" : "progress";
+    m_scoringMode = normalizeScoringMode(row.scoringMode);
     m_targetScore = std::max(0, row.targetScore);
+    m_startingHp = std::max(0, row.startingHp);
+    m_finalizeAliveCount = std::max(0, row.finalizeAliveCount);
     if (!row.endsAt.empty()) {
         m_matchEndsAtEpoch = gdvn::utils::date::parseIsoEpochSeconds(row.endsAt);
         m_lastCountdownSeconds = -1;
@@ -651,11 +674,17 @@ std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto con
     if (kind == "progress") {
         auto progress = metadata.progress;
         auto mode = metadata.mode == "platformer" ? "platformer" : m_mode;
-        auto scoringMode = metadata.scoringMode == "score" ? "score" : m_scoringMode;
+        auto scoringMode = metadata.scoringMode == "score" || metadata.scoringMode == "hp"
+            ? metadata.scoringMode
+            : m_scoringMode;
         auto targetScore = metadata.targetScore > 0 ? metadata.targetScore : m_targetScore;
+        auto startingHp = metadata.startingHp > 0 ? metadata.startingHp : m_startingHp;
         auto player = this->participantLabel(metadata.uid);
         if (scoringMode == "score" && mode != "platformer") {
             return fmt::format("{} reached {} score.", player, formatScore(progress, targetScore));
+        }
+        if (scoringMode == "hp" && mode != "platformer") {
+            return fmt::format("{} has {} remaining.", player, formatHp(progress, startingHp));
         }
 
         auto formattedProgress = formatProgressForMode(progress, mode);
@@ -981,6 +1010,10 @@ bool PvpOverlayService::isCustomRoomMatch() const {
 std::string PvpOverlayService::formatProgressLabel(float progress) const {
     if (m_scoringMode == "score" && m_mode != "platformer") {
         return formatScore(progress, m_targetScore);
+    }
+
+    if (m_scoringMode == "hp" && m_mode != "platformer") {
+        return formatHp(progress, m_startingHp);
     }
 
     return formatProgressForMode(progress, m_mode);
