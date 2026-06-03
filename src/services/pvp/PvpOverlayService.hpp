@@ -3,6 +3,8 @@
 #include "../../clients/pvp/PvpWebsocketClient.hpp"
 #include "../../dtos/pvp/PvpMessageDto.hpp"
 #include "../../dtos/pvp/PvpMessagesResponseDto.hpp"
+#include "../../dtos/pvp/PvpPowerupCastResponseDto.hpp"
+#include "../../dtos/pvp/PvpPowerupStateDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchPlayerProgressDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRealtimeMessageDto.hpp"
 #include "../../dtos/pvp/match/PvpMatchRowDto.hpp"
@@ -14,6 +16,7 @@
 #include <Geode/binding/PlayLayer.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +25,7 @@ using namespace geode::prelude;
 
 class PvpSubmitterService;
 class PvpChatPopup;
+class PvpPowerupPopup;
 class PvpOverlay;
 class PvpRecentChatStack;
 
@@ -40,11 +44,27 @@ class PvpOverlayService final {
     bool isChatMuted() const;
     void setChatMuted(bool muted);
     void submitChatMessage(std::string content);
+    bool openPowerups();
+    bool isPowerupMode() const;
+    std::string currentUid() const;
+    std::vector<PvpOverlayPlayerProgressModel> powerupTargets() const;
+    void requestPowerupState(std::function<void(PvpPowerupStateDto const&, bool)> callback);
+    void castPowerupSkill(std::string const& skill,
+                          std::string const& targetUid,
+                          bool randomTarget,
+                          std::function<void(PvpPowerupCastResponseDto const&, bool)> callback);
     void notifyChatPopupClosed(PvpChatPopup* popup);
+    void notifyPowerupPopupClosed(PvpPowerupPopup* popup);
     std::string getChatHistoryText() const;
     std::vector<std::string> getChatHistoryLines() const;
 
   private:
+    struct PendingRevealMessage {
+        PvpMessageDto message;
+        std::int64_t revealAtEpoch = 0;
+        bool animateNew = false;
+    };
+
     static constexpr float CHAT_GRACE_SECONDS = 3.0f * 60.0f;
     static constexpr float MESSAGE_REFRESH_COALESCE = 0.2f;
     static constexpr int MAX_CHAT_MESSAGE_LENGTH = 500;
@@ -55,6 +75,7 @@ class PvpOverlayService final {
     std::unique_ptr<PvpOverlay> m_overlay;
     std::unique_ptr<PvpRecentChatStack> m_recentChatStack;
     PvpChatPopup* m_chatPopup = nullptr;
+    PvpPowerupPopup* m_powerupPopup = nullptr;
     PvpSubmitterService* m_submitter = nullptr;
     std::shared_ptr<PvpWebsocketClient> m_websocketClient;
 
@@ -72,6 +93,12 @@ class PvpOverlayService final {
     bool m_connecting = false;
     bool m_requestingRealtimeToken = false;
     bool m_hideOverlayForLevelChange = false;
+    bool m_invisibleActive = false;
+    bool m_player1WasVisible = true;
+    bool m_player2WasVisible = true;
+    float m_flashbangTimer = -1.0f;
+    float m_invisibleTimer = -1.0f;
+    CCLayerColor* m_flashbangOverlay = nullptr;
 
     std::int64_t m_latestMessageID = 0;
     std::int64_t m_realtimeTokenExpiresAt = 0;
@@ -92,6 +119,7 @@ class PvpOverlayService final {
     PvpOverlayPlayerProgressModel m_opponent;
     std::vector<PvpOverlayPlayerProgressModel> m_players;
     std::vector<PvpOverlayChatMessageModel> m_chatMessages;
+    std::vector<PendingRevealMessage> m_pendingRevealMessages;
 
     void requestMatch();
     void requestRealtimeToken();
@@ -116,6 +144,12 @@ class PvpOverlayService final {
     std::vector<PvpOverlayPlayerProgressModel> sortedPlayers() const;
     void pushRecentMessage(PvpOverlayChatMessageModel const& message);
     void updateRecentMessages(float dt);
+    void processPendingRevealMessages();
+    void handlePowerupSkill(PvpMatchSystemMetadataDto const& metadata);
+    void startFlashbang(float durationSeconds);
+    void clearFlashbang();
+    void startInvisible(float durationSeconds);
+    void clearInvisible();
     void refreshLabel();
     void refreshChatVisibility();
     void setOverlayVisible(bool visible);

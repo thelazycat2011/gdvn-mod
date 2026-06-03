@@ -75,7 +75,7 @@ class ActivePvpMatchResponseAdapter {
             mode = readScoringMode(json["room"]);
         }
 
-        return mode == "score" || mode == "hp" ? mode : "progress";
+        return mode == "score" || mode == "hp" || mode == "powerup" ? mode : "progress";
     }
 
     static std::int64_t readTargetScore(matjson::Value const& json) {

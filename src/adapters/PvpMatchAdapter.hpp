@@ -141,6 +141,15 @@ class PvpMatchAdapter {
         dto.winnerUid = getString(json, "winnerUid");
         dto.resigningUid = getString(json, "resigningUid");
         dto.requesterUid = getString(json, "requesterUid");
+        dto.skill = getString(json, "skill");
+        dto.casterUid = getString(json, "casterUid");
+        dto.targetUid = getString(json, "targetUid");
+        dto.revealAt = getString(json, "revealAt");
+        dto.durationMs = static_cast<int>(getInteger(json, "durationMs"));
+        if (json["payload"].isObject()) {
+            dto.payloadEffect = getString(json["payload"], "effect");
+            dto.payloadDurationMs = static_cast<int>(getInteger(json["payload"], "durationMs"));
+        }
         dto.nextLevelID = getInteger(json, "nextLevelId");
         return dto;
     }
@@ -185,7 +194,7 @@ class PvpMatchAdapter {
             mode = getScoringMode(json["room"]);
         }
 
-        return mode == "score" || mode == "hp" ? mode : "progress";
+        return mode == "score" || mode == "hp" || mode == "powerup" ? mode : "progress";
     }
 
     static std::int64_t getTargetScore(matjson::Value const& json) {

@@ -10,6 +10,7 @@
 #include "../../consts/WebsocketEventConst.hpp"
 #include "../../ui/components/pvp/PvpChatPopup.hpp"
 #include "../../ui/components/pvp/PvpOverlay.hpp"
+#include "../../ui/components/pvp/PvpPowerupPopup.hpp"
 #include "../../ui/components/pvp/PvpRecentChatStack.hpp"
 #include "../../utils/DateUtils.hpp"
 #include "../../utils/StringUtils.hpp"
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 using namespace geode::prelude;
 
@@ -68,7 +70,11 @@ std::string formatHp(float value, int startingHp) {
 }
 
 std::string normalizeScoringMode(std::string const& mode) {
-    return mode == "score" || mode == "hp" ? mode : "progress";
+    return mode == "score" || mode == "hp" || mode == "powerup" ? mode : "progress";
+}
+
+bool isScoreLikeScoringMode(std::string const& mode) {
+    return mode == "score" || mode == "powerup";
 }
 
 } // namespace gdvn::pvp_overlay_detail
@@ -129,6 +135,76 @@ bool PvpOverlayService::openChat() {
     return true;
 }
 
+bool PvpOverlayService::isPowerupMode() const {
+    return this->hasPvpMatch() && m_scoringMode == "powerup" && m_mode != "platformer";
+}
+
+std::string PvpOverlayService::currentUid() const {
+    return m_currentUid;
+}
+
+std::vector<PvpOverlayPlayerProgressModel> PvpOverlayService::powerupTargets() const {
+    std::vector<PvpOverlayPlayerProgressModel> targets;
+
+    for (auto const& player : m_players) {
+        if (!player.uid.empty() && player.uid != m_currentUid) {
+            targets.push_back(player);
+        }
+    }
+
+    if (targets.empty() && !m_opponent.uid.empty() && m_opponent.uid != m_currentUid) {
+        targets.push_back(m_opponent);
+    }
+
+    return targets;
+}
+
+bool PvpOverlayService::openPowerups() {
+    if (!this->isPowerupMode()) {
+        return false;
+    }
+
+    if (m_powerupPopup) {
+        m_powerupPopup->refresh();
+        return true;
+    }
+
+    m_powerupPopup = PvpPowerupPopup::create(this);
+    if (!m_powerupPopup) {
+        return false;
+    }
+
+    m_powerupPopup->show();
+    m_powerupPopup->refresh();
+    return true;
+}
+
+void PvpOverlayService::requestPowerupState(std::function<void(PvpPowerupStateDto const&, bool)> callback) {
+    if (!this->isPowerupMode()) {
+        callback({}, false);
+        return;
+    }
+
+    PvpClient::getPowerupState(m_matchID, [callback](PvpPowerupStateDto const& state, web::WebResponse& res) {
+        callback(state, res.ok() && state.valid);
+    });
+}
+
+void PvpOverlayService::castPowerupSkill(std::string const& skill,
+                                         std::string const& targetUid,
+                                         bool randomTarget,
+                                         std::function<void(PvpPowerupCastResponseDto const&, bool)> callback) {
+    if (!this->isPowerupMode()) {
+        callback({}, false);
+        return;
+    }
+
+    PvpClient::castPowerup(m_matchID, skill, targetUid, randomTarget,
+                           [callback](PvpPowerupCastResponseDto const& response, web::WebResponse& res) {
+                               callback(response, res.ok() && response.valid);
+                           });
+}
+
 void PvpOverlayService::setChatMuted(bool muted) {
     if (m_chatMuted == muted) {
         return;
@@ -149,6 +225,12 @@ void PvpOverlayService::setChatMuted(bool muted) {
 void PvpOverlayService::notifyChatPopupClosed(PvpChatPopup* popup) {
     if (m_chatPopup == popup) {
         m_chatPopup = nullptr;
+    }
+}
+
+void PvpOverlayService::notifyPowerupPopupClosed(PvpPowerupPopup* popup) {
+    if (m_powerupPopup == popup) {
+        m_powerupPopup = nullptr;
     }
 }
 
@@ -558,6 +640,20 @@ void PvpOverlayService::handleMessageRow(PvpMessageDto const& dto, bool animateN
     if (message.type == "system") {
         auto metadata = PvpMatchAdapter::systemMetadataFromJson(dto.metadata);
         auto kind = metadata.kind;
+        auto revealAtEpoch = gdvn::utils::date::parseIsoEpochSeconds(metadata.revealAt);
+        if (revealAtEpoch > gdvn::utils::date::currentEpochSeconds()) {
+            auto existing = std::find_if(m_pendingRevealMessages.begin(), m_pendingRevealMessages.end(),
+                                         [&dto](PendingRevealMessage const& item) {
+                                             return item.message.id == dto.id && dto.id > 0;
+                                         });
+            if (existing == m_pendingRevealMessages.end()) {
+                m_pendingRevealMessages.push_back({dto, revealAtEpoch, animateNew});
+            }
+            if (message.id > m_latestMessageID) {
+                m_latestMessageID = message.id;
+            }
+            return;
+        }
         isProgressSystemMessage = kind == "progress" || kind == "hp_damage";
         isHiddenSystemMessage = kind == "play_mode";
         this->handleSystemMetadata(metadata);
@@ -618,6 +714,11 @@ void PvpOverlayService::handleSystemMetadata(PvpMatchSystemMetadataDto const& me
 
     auto kind = metadata.kind;
 
+    if (kind == "powerup_skill") {
+        this->handlePowerupSkill(metadata);
+        return;
+    }
+
     if (kind == "level_changed") {
         auto nextLevelID = static_cast<int>(metadata.nextLevelID);
         if (m_submitter && nextLevelID > 0) {
@@ -665,6 +766,91 @@ void PvpOverlayService::handleSystemMetadata(PvpMatchSystemMetadataDto const& me
     this->refreshLabel();
 }
 
+void PvpOverlayService::handlePowerupSkill(PvpMatchSystemMetadataDto const& metadata) {
+    if (metadata.targetUid.empty() || metadata.targetUid != m_currentUid) {
+        return;
+    }
+
+    auto effect = metadata.payloadEffect.empty() ? metadata.skill : metadata.payloadEffect;
+    auto durationMs = metadata.payloadDurationMs > 0 ? metadata.payloadDurationMs : metadata.durationMs;
+    auto durationSeconds = std::max(0.1f, static_cast<float>(durationMs > 0 ? durationMs : 1000) / 1000.0f);
+
+    if (effect == "flashbang") {
+        this->startFlashbang(durationSeconds);
+        return;
+    }
+
+    if (effect == "invisible") {
+        this->startInvisible(durationSeconds);
+    }
+}
+
+void PvpOverlayService::startFlashbang(float durationSeconds) {
+    if (!m_layer) {
+        return;
+    }
+
+    this->clearFlashbang();
+
+    auto size = CCDirector::sharedDirector()->getWinSize();
+    m_flashbangOverlay = CCLayerColor::create(ccc4(255, 255, 255, 255), size.width, size.height);
+    if (!m_flashbangOverlay) {
+        return;
+    }
+
+    m_flashbangOverlay->setID("gdvn-pvp-flashbang-overlay"_spr);
+    m_flashbangOverlay->setZOrder(9999);
+    m_layer->addChild(m_flashbangOverlay);
+    m_flashbangTimer = durationSeconds;
+}
+
+void PvpOverlayService::clearFlashbang() {
+    m_flashbangTimer = -1.0f;
+
+    if (m_flashbangOverlay) {
+        m_flashbangOverlay->removeFromParentAndCleanup(true);
+        m_flashbangOverlay = nullptr;
+    }
+}
+
+void PvpOverlayService::startInvisible(float durationSeconds) {
+    if (!m_layer) {
+        return;
+    }
+
+    if (!m_invisibleActive) {
+        m_player1WasVisible = !m_layer->m_player1 || m_layer->m_player1->isVisible();
+        m_player2WasVisible = !m_layer->m_player2 || m_layer->m_player2->isVisible();
+    }
+
+    m_invisibleActive = true;
+    m_invisibleTimer = durationSeconds;
+
+    if (m_layer->m_player1) {
+        m_layer->m_player1->setVisible(false);
+    }
+    if (m_layer->m_player2) {
+        m_layer->m_player2->setVisible(false);
+    }
+}
+
+void PvpOverlayService::clearInvisible() {
+    m_invisibleTimer = -1.0f;
+
+    if (!m_invisibleActive) {
+        return;
+    }
+
+    if (m_layer && m_layer->m_player1) {
+        m_layer->m_player1->setVisible(m_player1WasVisible);
+    }
+    if (m_layer && m_layer->m_player2) {
+        m_layer->m_player2->setVisible(m_player2WasVisible);
+    }
+
+    m_invisibleActive = false;
+}
+
 std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto const& metadata) const {
     if (!metadata.valid) {
         return "Match update.";
@@ -680,13 +866,13 @@ std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto con
     if (kind == "progress") {
         auto progress = metadata.progress;
         auto mode = metadata.mode == "platformer" ? "platformer" : m_mode;
-        auto scoringMode = metadata.scoringMode == "score" || metadata.scoringMode == "hp"
+        auto scoringMode = metadata.scoringMode == "score" || metadata.scoringMode == "hp" || metadata.scoringMode == "powerup"
             ? metadata.scoringMode
             : m_scoringMode;
         auto targetScore = metadata.targetScore > 0 ? metadata.targetScore : m_targetScore;
         auto startingHp = metadata.startingHp > 0 ? metadata.startingHp : m_startingHp;
         auto player = this->participantLabel(metadata.uid);
-        if (scoringMode == "score" && mode != "platformer") {
+        if (isScoreLikeScoringMode(scoringMode) && mode != "platformer") {
             return fmt::format("{} reached {} score.", player, formatScore(progress, targetScore));
         }
         if (scoringMode == "hp" && mode != "platformer") {
@@ -699,6 +885,22 @@ std::string PvpOverlayService::formatSystemMessage(PvpMatchSystemMetadataDto con
         }
 
         return fmt::format("{} reached {} progress.", player, formattedProgress);
+    }
+
+    if (kind == "powerup_skill") {
+        auto skill = metadata.skill == "invisible" ? "Invisible" : "Flashbang";
+        return fmt::format("{} used {} on {}.", this->participantLabel(metadata.casterUid), skill,
+                           this->participantLabel(metadata.targetUid));
+    }
+
+    if (kind == "powerup_blocked") {
+        auto skill = metadata.skill == "invisible" ? "Invisible" : "Flashbang";
+        return fmt::format("{}'s Shield blocked {}'s {}.", this->participantLabel(metadata.targetUid),
+                           this->participantLabel(metadata.casterUid), skill);
+    }
+
+    if (kind == "powerup_shield") {
+        return fmt::format("{}'s Shield ended.", this->participantLabel(metadata.casterUid));
     }
 
     if (kind == "match_end") {
@@ -838,6 +1040,30 @@ void PvpOverlayService::updateRecentMessages(float dt) {
     this->refreshChatVisibility();
 }
 
+void PvpOverlayService::processPendingRevealMessages() {
+    if (m_pendingRevealMessages.empty()) {
+        return;
+    }
+
+    auto now = gdvn::utils::date::currentEpochSeconds();
+    std::vector<PendingRevealMessage> due;
+    std::vector<PendingRevealMessage> pending;
+
+    for (auto const& item : m_pendingRevealMessages) {
+        if (item.revealAtEpoch <= now) {
+            due.push_back(item);
+        } else {
+            pending.push_back(item);
+        }
+    }
+
+    m_pendingRevealMessages = std::move(pending);
+
+    for (auto const& item : due) {
+        this->handleMessageRow(item.message, item.animateNew);
+    }
+}
+
 void PvpOverlayService::update(float dt) {
     if (m_cleanedUp) {
         return;
@@ -849,7 +1075,22 @@ void PvpOverlayService::update(float dt) {
     if (m_recentChatStack) {
         m_recentChatStack->updatePosition();
     }
+    this->processPendingRevealMessages();
     this->updateRecentMessages(dt);
+
+    if (m_flashbangTimer >= 0.0f) {
+        m_flashbangTimer -= dt;
+        if (m_flashbangTimer <= 0.0f) {
+            this->clearFlashbang();
+        }
+    }
+
+    if (m_invisibleTimer >= 0.0f) {
+        m_invisibleTimer -= dt;
+        if (m_invisibleTimer <= 0.0f) {
+            this->clearInvisible();
+        }
+    }
 
     if (m_active && m_matchEndsAtEpoch > 0) {
         auto countdownSeconds =
@@ -929,6 +1170,8 @@ void PvpOverlayService::cleanup() {
     }
 
     m_cleanedUp = true;
+    this->clearFlashbang();
+    this->clearInvisible();
     this->closeRealtime();
 
     if (s_activeOverlay == this) {
@@ -938,6 +1181,11 @@ void PvpOverlayService::cleanup() {
     if (m_chatPopup) {
         m_chatPopup->closeFromOverlay();
         m_chatPopup = nullptr;
+    }
+
+    if (m_powerupPopup) {
+        m_powerupPopup->closeFromOverlay();
+        m_powerupPopup = nullptr;
     }
 
     m_recentChatStack.reset();
@@ -1014,7 +1262,7 @@ bool PvpOverlayService::isCustomRoomMatch() const {
 }
 
 std::string PvpOverlayService::formatProgressLabel(float progress) const {
-    if (m_scoringMode == "score" && m_mode != "platformer") {
+    if (isScoreLikeScoringMode(m_scoringMode) && m_mode != "platformer") {
         return formatScore(progress, m_targetScore);
     }
 

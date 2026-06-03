@@ -3,6 +3,7 @@
 #include "../../adapters/PvpMatchAdapter.hpp"
 #include "../../adapters/PvpMessageAdapter.hpp"
 #include "../../adapters/PvpMessagesResponseAdapter.hpp"
+#include "../../adapters/PvpPowerupAdapter.hpp"
 #include "../../consts/ConfigConst.hpp"
 #include <algorithm>
 #include <cmath>
@@ -184,6 +185,67 @@ void PvpClient::postMessage(int matchID, std::string const& content, PostMessage
             auto jsonResult = res.json();
             if (jsonResult) {
                 dto = PvpMessageAdapter::fromJson(jsonResult.unwrap());
+            }
+        }
+
+        callback(dto, res);
+    });
+}
+
+void PvpClient::getPowerupState(int matchID, GetPowerupStateCallback callback) {
+    web::WebRequest req;
+    auto url = gdvn::config::API_URL + "/pvp/matches/" + std::to_string(matchID) + "/powerups";
+
+    req.header("Authorization", "Bearer " + gdvn::config::getToken());
+
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    PvpClient::s_getMatchHolders.push_back(holder);
+    holder->spawn(req.get(url), [callback, holder](web::WebResponse res) {
+        auto& holders = PvpClient::s_getMatchHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
+        PvpPowerupStateDto dto;
+
+        if (res.ok()) {
+            auto jsonResult = res.json();
+            if (jsonResult) {
+                dto = PvpPowerupAdapter::stateFromJson(jsonResult.unwrap());
+            }
+        }
+
+        callback(dto, res);
+    });
+}
+
+void PvpClient::castPowerup(int matchID,
+                            std::string const& skill,
+                            std::string const& targetUid,
+                            bool randomTarget,
+                            CastPowerupCallback callback) {
+    web::WebRequest req;
+    auto body = matjson::Value::object();
+    body["skill"] = skill;
+    body["randomTarget"] = randomTarget;
+    if (!targetUid.empty()) {
+        body["targetUid"] = targetUid;
+    }
+    req.bodyJSON(body);
+    req.header("Authorization", "Bearer " + gdvn::config::getToken());
+
+    auto url = gdvn::config::API_URL + "/pvp/matches/" + std::to_string(matchID) + "/powerups/cast";
+
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    PvpClient::s_postHolders.push_back(holder);
+    holder->spawn(req.post(url), [callback, holder](web::WebResponse res) {
+        auto& holders = PvpClient::s_postHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
+        PvpPowerupCastResponseDto dto;
+
+        if (res.ok()) {
+            auto jsonResult = res.json();
+            if (jsonResult) {
+                dto = PvpPowerupAdapter::castResponseFromJson(jsonResult.unwrap());
             }
         }
 

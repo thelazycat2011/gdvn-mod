@@ -5,6 +5,7 @@
 
 #include "../services/pvp/PvpOverlayService.hpp"
 #include "../ui/components/pvp/PvpChatButton.hpp"
+#include "../ui/components/pvp/PvpPowerupButton.hpp"
 
 using namespace geode::prelude;
 
@@ -38,6 +39,10 @@ class $modify(GDVNPauseLayer, PauseLayer) {
         if (!menu) {
             log::warn("Could not find PauseLayer right-button-menu for GDVN controls");
             return;
+        }
+
+        if (overlay->isPowerupMode()) {
+            menu->addChild(PvpPowerupButton::create());
         }
 
         menu->addChild(PvpChatButton::create());

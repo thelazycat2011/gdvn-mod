@@ -34,7 +34,8 @@ PvpSubmitterService::PvpSubmitterService(int levelID, std::string playMode)
                 }
                 locked->matchID = resolvedMatch.matchID;
                 locked->platformer = resolvedMatch.mode == "platformer";
-                locked->scoreMode = resolvedMatch.scoringMode == "score" || resolvedMatch.scoringMode == "hp";
+                locked->scoreMode = resolvedMatch.scoringMode == "score" || resolvedMatch.scoringMode == "hp" ||
+                    resolvedMatch.scoringMode == "powerup";
                 locked->inPvp.store(locked->matchID > 0);
                 const bool levelValid = PvpSubmitterService::isLevelValid(locked);
 

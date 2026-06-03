@@ -18,5 +18,12 @@ struct PvpMatchSystemMetadataDto {
     std::string winnerUid;
     std::string resigningUid;
     std::string requesterUid;
+    std::string skill;
+    std::string casterUid;
+    std::string targetUid;
+    std::string revealAt;
+    std::string payloadEffect;
+    int durationMs = 0;
+    int payloadDurationMs = 0;
     std::int64_t nextLevelID = 0;
 };
