@@ -55,7 +55,7 @@ bool PvpPowerupPopup::init(PvpOverlayService* overlay) {
     m_flashButton = CCMenuItemExt::createSpriteExtra(flashSprite, [this](auto*) { this->cast("flashbang"); });
     m_buttonMenu->addChildAtPosition(m_flashButton, Anchor::BottomLeft, {62.0f, 72.0f});
 
-    auto invisibleSprite = ButtonSprite::create("Invis 75", "goldFont.fnt", "GJ_button_01.png", 0.8f);
+    auto invisibleSprite = ButtonSprite::create("Invis 40", "goldFont.fnt", "GJ_button_01.png", 0.8f);
     invisibleSprite->setScale(0.48f);
     m_invisibleButton = CCMenuItemExt::createSpriteExtra(invisibleSprite, [this](auto*) { this->cast("invisible"); });
     m_buttonMenu->addChildAtPosition(m_invisibleButton, Anchor::Bottom, {0.0f, 72.0f});
@@ -264,7 +264,7 @@ int PvpPowerupPopup::skillCost(std::string const& skill) const {
         return 55;
     }
     if (skill == "invisible") {
-        return 75;
+        return 40;
     }
     if (skill == "pause") {
         return 35;

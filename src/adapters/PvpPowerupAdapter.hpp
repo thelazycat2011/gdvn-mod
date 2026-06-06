@@ -68,7 +68,7 @@ class PvpPowerupAdapter {
     static std::vector<PvpPowerupSkillDto> defaultSkills() {
         return {
             {"flashbang", 55, 1000, "flashbang", true},
-            {"invisible", 75, 2000, "invisible", true},
+            {"invisible", 40, 2000, "invisible", true},
             {"shield", 45, 20000, "shield", false},
             {"pause", 35, 0, "pause", true},
             {"double_click", 65, 10000, "double_click", true},
