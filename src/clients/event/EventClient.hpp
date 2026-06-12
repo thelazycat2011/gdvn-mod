@@ -3,7 +3,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/web.hpp>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "../../dtos/common/EmptyResponseDto.hpp"
 
@@ -17,6 +19,5 @@ class EventClient {
     static void putLevel(int levelID, float progress, Callback callback);
 
   private:
-    static async::TaskHolder<web::WebResponse> s_getHolder;
-    static async::TaskHolder<web::WebResponse> s_putHolder;
+    static std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> s_holders;
 };

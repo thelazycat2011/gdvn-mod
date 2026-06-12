@@ -13,7 +13,13 @@ EventSubmitterService::EventSubmitterService(int levelID) : m_state(std::make_sh
     std::weak_ptr<State> state = m_state;
     EventClient::getEventLevel(levelID, "", [=](EmptyResponseDto const&, web::WebResponse& res) {
         if (auto locked = state.lock()) {
-            locked->inEvent.store(res.ok());
+            const bool inEvent = res.ok();
+            locked->inEvent.store(inEvent);
+
+            if (inEvent && locked->best > 0) {
+                EventClient::putLevel(locked->levelID, locked->best,
+                                      [](EmptyResponseDto const&, web::WebResponse&) {});
+            }
         }
     });
 }

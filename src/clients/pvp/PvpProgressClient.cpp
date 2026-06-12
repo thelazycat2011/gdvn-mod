@@ -1,8 +1,11 @@
 #include "PvpProgressClient.hpp"
 
 #include "../../consts/ConfigConst.hpp"
+#include <algorithm>
+#include <memory>
+#include <vector>
 
-async::TaskHolder<web::WebResponse> PvpProgressClient::s_postHolder;
+std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> PvpProgressClient::s_postHolders;
 
 void PvpProgressClient::postHeatmap(size_t count, Callback callback) {
     web::WebRequest req;
@@ -10,7 +13,12 @@ void PvpProgressClient::postHeatmap(size_t count, Callback callback) {
 
     req.header("Authorization", "Bearer " + gdvn::config::getToken());
 
-    PvpProgressClient::s_postHolder.spawn(req.post(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    PvpProgressClient::s_postHolders.push_back(holder);
+    holder->spawn(req.post(url), [callback, holder](web::WebResponse res) {
+        auto& holders = PvpProgressClient::s_postHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         EmptyResponseDto dto;
         callback(dto, res);
     });
@@ -26,7 +34,12 @@ void PvpProgressClient::postDeathCount(int levelID, std::string const& count, bo
 
     req.header("Authorization", "Bearer " + gdvn::config::getToken());
 
-    PvpProgressClient::s_postHolder.spawn(req.post(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    PvpProgressClient::s_postHolders.push_back(holder);
+    holder->spawn(req.post(url), [callback, holder](web::WebResponse res) {
+        auto& holders = PvpProgressClient::s_postHolders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         EmptyResponseDto dto;
         callback(dto, res);
     });

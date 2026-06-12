@@ -3,7 +3,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/web.hpp>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "../../dtos/common/EmptyResponseDto.hpp"
 
@@ -17,5 +19,5 @@ class PvpProgressClient {
     static void postDeathCount(int levelID, std::string const& count, bool completed, Callback callback);
 
   private:
-    static async::TaskHolder<web::WebResponse> s_postHolder;
+    static std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> s_postHolders;
 };

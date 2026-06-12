@@ -1,9 +1,11 @@
 #include "EventClient.hpp"
 
 #include "../../consts/ConfigConst.hpp"
+#include <algorithm>
+#include <memory>
+#include <vector>
 
-async::TaskHolder<web::WebResponse> EventClient::s_getHolder;
-async::TaskHolder<web::WebResponse> EventClient::s_putHolder;
+std::vector<std::shared_ptr<async::TaskHolder<web::WebResponse>>> EventClient::s_holders;
 
 void EventClient::getEventLevel(int levelID, std::string const& type, Callback callback) {
     web::WebRequest req;
@@ -15,7 +17,12 @@ void EventClient::getEventLevel(int levelID, std::string const& type, Callback c
 
     req.header("Authorization", "Bearer " + gdvn::config::getToken());
 
-    EventClient::s_getHolder.spawn(req.get(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    EventClient::s_holders.push_back(holder);
+    holder->spawn(req.get(url), [callback, holder](web::WebResponse res) {
+        auto& holders = EventClient::s_holders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         EmptyResponseDto dto;
         callback(dto, res);
     });
@@ -28,7 +35,12 @@ void EventClient::putLevel(int levelID, float progress, Callback callback) {
 
     req.header("Authorization", "Bearer " + gdvn::config::getToken());
 
-    EventClient::s_putHolder.spawn(req.put(url), [callback](web::WebResponse res) {
+    auto holder = std::make_shared<async::TaskHolder<web::WebResponse>>();
+    EventClient::s_holders.push_back(holder);
+    holder->spawn(req.put(url), [callback, holder](web::WebResponse res) {
+        auto& holders = EventClient::s_holders;
+        holders.erase(std::remove(holders.begin(), holders.end(), holder), holders.end());
+
         EmptyResponseDto dto;
         callback(dto, res);
     });
