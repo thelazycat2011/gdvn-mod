@@ -6,6 +6,7 @@
 #include "../services/progress/DeathCounterService.hpp"
 #include "../services/pvp/PvpOverlayService.hpp"
 #include "../services/pvp/PvpSubmitterService.hpp"
+#include "../services/tournament/TournamentContestSubmitterService.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CheckpointGameObject.hpp>
 #include <Geode/modify/PlayLayer.hpp> // DO NOT REMOVE
@@ -27,6 +28,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         std::unique_ptr<RaidSubmitterService> raidSubmitter;
         std::unique_ptr<PvpSubmitterService> pvpSubmitter;
         std::unique_ptr<PvpOverlayService> pvpOverlay;
+        std::unique_ptr<TournamentContestSubmitterService> tournamentContestSubmitter;
         std::unordered_set<int> platformerCheckpointIds;
         int platformerCheckpointCount = 0;
         bool lastPracticeMode = false;
@@ -63,6 +65,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->raidSubmitter = std::make_unique<RaidSubmitterService>(id);
         m_fields->lastPracticeMode = m_isPracticeMode;
         m_fields->pvpSubmitter = std::make_unique<PvpSubmitterService>(id, m_isPracticeMode ? "practice" : "normal");
+        m_fields->tournamentContestSubmitter = std::make_unique<TournamentContestSubmitterService>(id);
         m_fields->antiCheat.reset(this);
 
         if (AuthService::isLoggedIn() && !m_isPracticeMode) {
@@ -119,6 +122,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->eventSubmitter->record(progress);
         m_fields->raidSubmitter->record(progress);
         m_fields->pvpSubmitter->recordDeath(progress);
+        m_fields->tournamentContestSubmitter->record(progress);
     }
 
     void levelComplete() {
@@ -127,6 +131,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         if (!m_isPracticeMode) {
             if (m_level->isPlatformer()) {
                 m_fields->pvpSubmitter->completePlatformer(m_fields->platformerCheckpointCount);
+                m_fields->tournamentContestSubmitter->record(100);
                 return;
             }
 
@@ -141,6 +146,7 @@ class $modify(DTPlayLayer, PlayLayer) {
             m_fields->eventSubmitter->record(100);
             m_fields->raidSubmitter->record(100);
             m_fields->pvpSubmitter->record(100);
+            m_fields->tournamentContestSubmitter->record(100);
             m_fields->pvpSubmitter->flushDeathCount();
             m_fields->deathCounter.setCompleted(true);
         }
@@ -192,6 +198,7 @@ class $modify(DTPlayLayer, PlayLayer) {
         m_fields->eventSubmitter.reset();
         m_fields->raidSubmitter.reset();
         m_fields->pvpSubmitter.reset();
+        m_fields->tournamentContestSubmitter.reset();
 
         PlayLayer::onQuit();
     }
